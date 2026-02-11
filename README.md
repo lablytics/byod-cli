@@ -68,7 +68,7 @@ byod decrypt ./results/ -o ./decrypted/
 
 ### Step 1: Create a Lablytics Account
 
-1. Go to https://app.lablytics.io and sign up
+1. Go to https://byod.cultivatedcode.co and sign up
 2. Verify your email address
 3. Log in to the dashboard
 
