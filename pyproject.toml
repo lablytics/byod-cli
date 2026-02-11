@@ -88,7 +88,13 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",    # Line too long (handled by formatter)
+    "N806",    # Non-lowercase variable in function (MockClient patterns in tests)
+    "B008",    # Function call in default arg (standard Click/FastAPI patterns)
+    "SIM105",  # Use contextlib.suppress (stylistic preference)
+    "SIM117",  # Multiple with statements (readability preference)
+]
 
 [tool.mypy]
 python_version = "3.9"
