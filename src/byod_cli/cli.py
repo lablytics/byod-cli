@@ -34,6 +34,7 @@ from byod_cli.utils import (
     format_error,
     format_success,
     format_warning,
+    get_console,
     setup_logging,
 )
 
@@ -52,13 +53,20 @@ BANNER = """
 
 NONCE_SIZE = 12
 
+# Exit codes
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_AUTH = 2
+EXIT_NETWORK = 3
+EXIT_NOT_FOUND = 4
+
 
 def _get_api_client(config: ConfigManager) -> APIClient:
     """Create an authenticated API client."""
     api_key = config.get_api_key()
     if not api_key:
         raise click.ClickException(
-            "Not authenticated. Run 'byod auth login' first."
+            "Not authenticated. Run 'byod auth login' with your API key from https://byod.cultivatedcode.co"
         )
     return APIClient(api_url=config.get_api_url(), api_key=api_key)
 
@@ -87,8 +95,10 @@ def _decrypt_data(encrypted: bytes, key: bytes) -> bytes:
 @click.group()
 @click.version_option(version=__version__, prog_name="byod")
 @click.option("--debug", is_flag=True, help="Enable debug logging", envvar="BYOD_DEBUG")
+@click.option("--quiet", "-q", is_flag=True, help="Suppress progress output (for CI/CD)")
+@click.option("--no-color", is_flag=True, help="Disable colored output", envvar="NO_COLOR")
 @click.pass_context
-def cli(ctx: click.Context, debug: bool) -> None:
+def cli(ctx: click.Context, debug: bool, quiet: bool, no_color: bool) -> None:
     """
     BYOD - Bring Your Own Data Platform CLI
 
@@ -104,11 +114,16 @@ def cli(ctx: click.Context, debug: bool) -> None:
 
     For detailed help on any command: byod COMMAND --help
     """
+    global console
+    console = get_console(quiet=quiet, no_color=no_color)
+
     log_level = "DEBUG" if debug else "INFO"
     setup_logging(log_level)
 
     ctx.ensure_object(dict)
     ctx.obj["DEBUG"] = debug
+    ctx.obj["QUIET"] = quiet
+    ctx.obj["NO_COLOR"] = no_color
 
     try:
         config_manager = ConfigManager()
@@ -116,7 +131,7 @@ def cli(ctx: click.Context, debug: bool) -> None:
     except Exception as e:
         if ctx.invoked_subcommand not in ["auth"]:
             console.print(format_error(f"Configuration error: {e}"))
-            sys.exit(1)
+            sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -138,7 +153,7 @@ def auth_login(ctx: click.Context, api_key: str, api_url: str | None) -> None:
     """
     Authenticate with the Lablytics platform.
 
-    Get your API key from the Lablytics dashboard at https://app.lablytics.io/settings/api-keys
+    Get your API key from https://byod.cultivatedcode.co (Settings > API Keys)
 
     \b
     Examples:
@@ -158,10 +173,11 @@ def auth_login(ctx: click.Context, api_key: str, api_url: str | None) -> None:
             tenant_config = client.get_tenant_config()
     except AuthenticationError as e:
         console.print(format_error(str(e)))
-        sys.exit(1)
+        sys.exit(EXIT_AUTH)
     except APIError as e:
         console.print(format_error(f"Failed to connect: {e}"))
-        sys.exit(1)
+        console.print("  Check your network connection or try again.")
+        sys.exit(EXIT_NETWORK)
 
     # Save credentials
     config.set_api_credentials(api_key, api_url)
@@ -203,14 +219,18 @@ def auth_logout(ctx: click.Context) -> None:
 
 
 @auth.command(name="status")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 @click.pass_context
-def auth_status(ctx: click.Context) -> None:
+def auth_status(ctx: click.Context, output_format: str) -> None:
     """Check authentication status."""
     config = ctx.obj["CONFIG"]
 
     if not config.is_authenticated():
-        console.print("\n[yellow]Not authenticated.[/yellow]")
-        console.print("Run [cyan]byod auth login[/cyan] to authenticate.\n")
+        if output_format == "json":
+            click.echo(json.dumps({"authenticated": False}))
+        else:
+            console.print("\n[yellow]Not authenticated.[/yellow]")
+            console.print("Run [cyan]byod auth login[/cyan] to authenticate.\n")
         return
 
     try:
@@ -219,14 +239,25 @@ def auth_status(ctx: click.Context) -> None:
             client.verify_auth()
             tenant_config = client.get_tenant_config()
 
-        console.print("\n[bold green]Authenticated[/bold green]")
-        console.print(f"\n  Organization: {tenant_config.organization_name}")
-        console.print(f"  Tenant ID:    {tenant_config.tenant_id}")
-        console.print(f"  API URL:      {config.get_api_url()}\n")
+        if output_format == "json":
+            click.echo(json.dumps({
+                "authenticated": True,
+                "organization": tenant_config.organization_name,
+                "tenant_id": tenant_config.tenant_id,
+                "api_url": config.get_api_url(),
+            }))
+        else:
+            console.print("\n[bold green]Authenticated[/bold green]")
+            console.print(f"\n  Organization: {tenant_config.organization_name}")
+            console.print(f"  Tenant ID:    {tenant_config.tenant_id}")
+            console.print(f"  API URL:      {config.get_api_url()}\n")
 
     except AuthenticationError:
-        console.print("\n[red]Authentication expired or invalid.[/red]")
-        console.print("Run [cyan]byod auth login[/cyan] to re-authenticate.\n")
+        if output_format == "json":
+            click.echo(json.dumps({"authenticated": False, "error": "expired_or_invalid"}))
+        else:
+            console.print("\n[red]Authentication expired or invalid.[/red]")
+            console.print("Run [cyan]byod auth login[/cyan] to re-authenticate.\n")
 
 
 # ============================================================================
@@ -276,7 +307,7 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
         tenant_id = enclave_info["tenant_id"]
     except APIError as e:
         console.print(format_error(f"Failed to get enclave info: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"  Tenant ID: {tenant_id}")
     if len(pcr0_values) == 1:
@@ -295,11 +326,13 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
         console.print(f"  AWS Account: {customer_account_id}")
         console.print(f"  Region: {region}")
     except ClientError as e:
-        console.print(format_error(f"Failed to get AWS identity: {e}"))
-        console.print("\nMake sure your AWS credentials are configured:")
-        console.print("  - ~/.aws/credentials file, or")
-        console.print("  - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables")
-        sys.exit(1)
+        console.print(format_error(
+            "AWS credentials not found. Run 'aws configure' or set "
+            "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables."
+        ))
+        if ctx.obj.get("DEBUG"):
+            console.print(f"\n  [dim]{e}[/dim]")
+        sys.exit(EXIT_ERROR)
 
     role_name = f"BYODEnclaveRole-{tenant_id[:16]}"
     alias_name = f"alias/byod-{tenant_id[:16]}"
@@ -397,7 +430,7 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
             console.print(f"  Role already exists: {role_arn}")
         else:
             console.print(format_error(f"Failed to create IAM role: {e}"))
-            sys.exit(1)
+            sys.exit(EXIT_ERROR)
 
     # Step 4: Create KMS key with attestation policy
     # Uses two-Deny pattern to guarantee attestation enforcement
@@ -507,8 +540,9 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
             pass  # Alias might already exist
 
     except ClientError as e:
-        console.print(format_error(f"Failed to create KMS key: {e}"))
-        sys.exit(1)
+        console.print(format_error(f"KMS operation failed: {e}"))
+        console.print("\n  Check that your AWS user has kms:CreateKey and kms:PutKeyPolicy permissions.")
+        sys.exit(EXIT_ERROR)
 
     # Step 5: Attach KMS policy to the role
     console.print("\n[dim]Attaching KMS permissions to role...[/dim]")
@@ -533,7 +567,7 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
         console.print("  Attached BYODKMSAccess policy")
     except ClientError as e:
         console.print(format_error(f"Failed to attach policy: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     # Step 6: Register with Lablytics
     console.print("\n[dim]Registering with Lablytics...[/dim]")
@@ -549,7 +583,7 @@ def setup(ctx: click.Context, region: str, force_new: bool) -> None:
         console.print(format_error(f"Failed to register with Lablytics: {e}"))
         console.print("\n[yellow]AWS resources were created but not registered.[/yellow]")
         console.print("You may need to manually configure KMS in the dashboard settings.")
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     # Save KMS key ARN and role ARN to config for update-policy command
     active_profile = config.get_active_profile_name()
@@ -615,7 +649,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
     active_profile = config.get_active_profile_name()
     if not active_profile:
         console.print(format_error("No active profile. Run 'byod setup' first."))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     profile = config.get_profile(active_profile)
     kms_key_arn = profile.get("settings", {}).get("kms_key_arn")
@@ -626,7 +660,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
             "No KMS key ARN found in config. Run 'byod setup' first, "
             "or re-run with --new to recreate resources."
         ))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"  KMS Key: {kms_key_arn}")
     console.print(f"  Role:    {role_arn}")
@@ -638,7 +672,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
         pcr0_values = enclave_info.get("pcr0_values") or [enclave_info["pcr0"]]
     except APIError as e:
         console.print(format_error(f"Failed to get enclave info: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"  Active PCR0 values: {len(pcr0_values)}")
     for i, v in enumerate(pcr0_values):
@@ -652,7 +686,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
         current_policy = json.loads(policy_response["Policy"])
     except ClientError as e:
         console.print(format_error(f"Failed to read key policy: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     # Step 4: Find and update the RoleDecryptWithAttestation statement
     updated = False
@@ -673,7 +707,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
             "Could not find RoleDecryptWithAttestation statement in key policy. "
             "The key policy may have been modified manually."
         ))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     # Step 5: Show diff and apply
     if old_pcr0_values and set(old_pcr0_values) == set(pcr0_values):
@@ -694,7 +728,7 @@ def update_policy(ctx: click.Context, region: str) -> None:
         console.print(format_success("\nKey policy updated successfully!"))
     except ClientError as e:
         console.print(format_error(f"Failed to update key policy: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"\n  Your KMS key now allows decryption from {len(pcr0_values)} enclave(s).")
     console.print("  You can verify by running: [cyan]byod update-policy[/cyan] again.\n")
@@ -710,10 +744,12 @@ def update_policy(ctx: click.Context, region: str) -> None:
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--description", help="Human-readable job description")
 @click.option("--config", "config_path", type=click.Path(exists=True, path_type=Path), help="Plugin config (JSON)")
-@click.option("--wait", is_flag=True, help="Wait for job completion (simple spinner)")
-@click.option("--track", is_flag=True, help="Track job progress with live status updates")
-@click.option("--timeout", type=int, default=3600, help="Timeout in seconds when using --wait or --track")
+@click.option("--wait", is_flag=True, help="Wait for job completion with live status updates")
+@click.option("--live", "wait", is_flag=True, hidden=True, help="Alias for --wait")
+@click.option("--track", "wait", is_flag=True, hidden=True, help="Alias for --wait")
+@click.option("--timeout", type=int, default=3600, help="Timeout in seconds when using --wait")
 @click.option("--tags", multiple=True, help="Metadata tags (format: key=value)")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 @click.pass_context
 def submit(
     ctx: click.Context,
@@ -722,9 +758,9 @@ def submit(
     description: str | None,
     config_path: Path | None,
     wait: bool,
-    track: bool,
     timeout: int,
     tags: tuple[str, ...],
+    output_format: str,
 ) -> None:
     """
     Submit data for secure enclave processing.
@@ -740,8 +776,9 @@ def submit(
     \b
     Examples:
         byod submit genomic-qc ./sample.fastq.gz
-        byod submit demo-count ./data.txt --track
+        byod submit demo-count ./data.txt --wait
         byod submit genomic-qc ./samples/ --tags experiment=exp001
+        byod submit genomic-qc ./data.fastq --format json
     """
     import time
 
@@ -753,7 +790,7 @@ def submit(
         client = _get_api_client(config)
     except click.ClickException:
         console.print(format_error("Not authenticated. Run 'byod auth login' first."))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print("\n[bold blue]Submitting job...[/bold blue]\n")
     console.print(f"  Plugin: {plugin}")
@@ -807,7 +844,7 @@ def submit(
         console.print(f"  Encrypted: {format_bytes(len(plaintext))} -> {format_bytes(len(encrypted_data))}")
 
         # Get presigned URLs and upload
-        with console.status("[bold green]Uploading encrypted data..."):
+        with console.status(f"[bold green]Uploading encrypted data ({format_bytes(len(encrypted_data))})..."):
             # Get presigned URL for encrypted data
             upload_presigned = client.get_upload_url(
                 filename=f"{input_path.name}.enc",
@@ -865,15 +902,19 @@ def submit(
             for i in range(len(plaintext_key)):
                 plaintext_key[i] = 0
 
-        console.print(format_success(f"Job submitted: {job.job_id}"))
+        if output_format == "json":
+            click.echo(json.dumps({"job_id": job.job_id, "status": "submitted"}))
+        else:
+            console.print(format_success(f"Job submitted: {job.job_id}"))
 
-        if not (wait or track):
-            console.print(f"\n  Check status:  [cyan]byod status {job.job_id}[/cyan]")
-            console.print(f"  Get results:   [cyan]byod get {job.job_id} -o ./output/[/cyan]\n")
+        if not wait:
+            if output_format != "json":
+                console.print(f"\n  Check status:  [cyan]byod status {job.job_id}[/cyan]")
+                console.print(f"  Get results:   [cyan]byod get {job.job_id} -o ./output/[/cyan]\n")
             return
 
-        # Track or wait for job completion
-        poll_interval = 5 if track else 10
+        # Wait for job completion with live status updates
+        poll_interval = 5
         elapsed = 0
         last_status = None
 
@@ -899,73 +940,52 @@ def submit(
             "cancelled": "Job cancelled",
         }
 
-        if track:
-            console.print("\n[bold]Tracking job progress:[/bold]\n")
+        console.print("\n[bold]Tracking job progress:[/bold]\n")
 
-            while elapsed < timeout:
-                status_info = client.get_job_status(job.job_id)
-                current_status = status_info["status"]
+        while elapsed < timeout:
+            status_info = client.get_job_status(job.job_id)
+            current_status = status_info["status"]
 
-                # Print status change
-                if current_status != last_status:
-                    icon = status_icons.get(current_status, "•")
-                    msg = status_messages.get(current_status, current_status)
-                    if current_status == "completed":
-                        console.print(f"  {icon} [bold green]{msg}[/bold green]")
-                    elif current_status in ["failed", "cancelled"]:
-                        error = status_info.get("error", "Unknown error")
-                        console.print(f"  {icon} [bold red]{msg}[/bold red]: {error}")
-                    else:
-                        console.print(f"  {icon} [cyan]{msg}[/cyan] [dim]({elapsed}s)[/dim]")
-                    last_status = current_status
-
-                # Check for terminal states
+            # Print status change
+            if current_status != last_status:
+                icon = status_icons.get(current_status, "•")
+                msg = status_messages.get(current_status, current_status)
                 if current_status == "completed":
-                    console.print(f"\n  Get results: [cyan]byod get {job.job_id} -o ./output/[/cyan]\n")
-                    return
+                    console.print(f"  {icon} [bold green]{msg}[/bold green]")
                 elif current_status in ["failed", "cancelled"]:
-                    sys.exit(1)
+                    error = status_info.get("error", "Unknown error")
+                    console.print(f"  {icon} [bold red]{msg}[/bold red]: {error}")
+                else:
+                    console.print(f"  {icon} [cyan]{msg}[/cyan] [dim]({elapsed}s)[/dim]")
+                last_status = current_status
 
-                time.sleep(poll_interval)
-                elapsed += poll_interval
+            # Check for terminal states
+            if current_status == "completed":
+                console.print(f"\n  Get results: [cyan]byod get {job.job_id} -o ./output/[/cyan]\n")
+                return
+            elif current_status in ["failed", "cancelled"]:
+                sys.exit(EXIT_ERROR)
 
-            console.print(format_warning(f"\nTimed out after {timeout}s. Job may still be processing."))
-            console.print(f"  Check status: [cyan]byod status {job.job_id}[/cyan]\n")
+            time.sleep(poll_interval)
+            elapsed += poll_interval
 
-        else:
-            # Simple --wait mode with spinner
-            console.print("\nWaiting for job completion...\n")
-
-            with console.status("[bold green]Processing...") as spinner:
-                while elapsed < timeout:
-                    status_info = client.get_job_status(job.job_id)
-                    if status_info["status"] == "completed":
-                        console.print(format_success("Job completed!"))
-                        console.print(f"\n  Get results: [cyan]byod get {job.job_id} -o ./output/[/cyan]\n")
-                        return
-                    elif status_info["status"] in ["failed", "cancelled"]:
-                        console.print(format_error(f"Job {status_info['status']}: {status_info.get('error', 'Unknown error')}"))
-                        sys.exit(1)
-
-                    spinner.update(f"[bold green]Processing ({elapsed}s elapsed)...")
-                    time.sleep(poll_interval)
-                    elapsed += poll_interval
-
-            console.print(format_warning(f"Timed out after {timeout}s. Job may still be processing."))
+        console.print(format_warning(f"\nTimed out after {timeout}s. Job may still be processing."))
+        console.print(f"  Check status: [cyan]byod status {job.job_id}[/cyan]\n")
 
     except AuthenticationError as e:
-        console.print(format_error(str(e)))
-        sys.exit(1)
+        console.print(format_error(f"Authentication failed: {e}"))
+        console.print("  Run [cyan]byod auth login[/cyan] to re-authenticate.")
+        sys.exit(EXIT_AUTH)
     except APIError as e:
         console.print(format_error(f"API error: {e}"))
         if ctx.obj.get("DEBUG"):
             console.print_exception()
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
     except Exception as e:
         console.print(format_error(f"Submission failed: {e}"))
         if ctx.obj.get("DEBUG"):
             console.print_exception()
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -999,7 +1019,7 @@ def status(ctx: click.Context, job_id: str, output_format: str) -> None:
 
     except APIError as e:
         console.print(format_error(f"Failed to get status: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 def _print_status(status_info: dict[str, Any]) -> None:
@@ -1100,7 +1120,7 @@ def list_jobs(ctx: click.Context, limit: int, filter_status: str | None, output_
 
     except APIError as e:
         console.print(format_error(f"Failed to list jobs: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -1108,7 +1128,7 @@ def list_jobs(ctx: click.Context, limit: int, filter_status: str | None, output_
 # ============================================================================
 
 
-@cli.command()
+@cli.command(deprecated=True)
 @click.argument("job_id")
 @click.option("-o", "--output", required=True, type=click.Path(path_type=Path), help="Output directory")
 @click.option("--overwrite", is_flag=True, help="Overwrite existing files")
@@ -1117,12 +1137,13 @@ def retrieve(ctx: click.Context, job_id: str, output: Path, overwrite: bool) -> 
     """
     Download encrypted results from a completed job.
 
-    Use 'byod decrypt' afterward to decrypt the results locally.
+    Deprecated: Use 'byod get <job-id> -o <dir>' instead, which retrieves and decrypts in one step.
 
     \b
     Examples:
         byod retrieve genomic-qc-20250126-abc123 -o ./results/
     """
+    console.print(format_warning("'byod retrieve' is deprecated. Use 'byod get <job-id> -o <dir>' instead."))
     import requests
 
     config = ctx.obj["CONFIG"]
@@ -1130,7 +1151,7 @@ def retrieve(ctx: click.Context, job_id: str, output: Path, overwrite: bool) -> 
 
     if output.exists() and any(output.iterdir()) and not overwrite:
         console.print(format_error(f"Output directory {output} is not empty. Use --overwrite."))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"\n[bold blue]Retrieving results for job {job_id}...[/bold blue]\n")
 
@@ -1188,12 +1209,12 @@ def retrieve(ctx: click.Context, job_id: str, output: Path, overwrite: bool) -> 
 
     except APIError as e:
         console.print(format_error(str(e)))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
     except Exception as e:
         console.print(format_error(f"Retrieve failed: {e}"))
         if ctx.obj.get("DEBUG"):
             console.print_exception()
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -1201,7 +1222,7 @@ def retrieve(ctx: click.Context, job_id: str, output: Path, overwrite: bool) -> 
 # ============================================================================
 
 
-@cli.command()
+@cli.command(deprecated=True)
 @click.argument("results_path", type=click.Path(exists=True, path_type=Path))
 @click.option("-o", "--output", required=True, type=click.Path(path_type=Path), help="Output directory for extracted files")
 @click.pass_context
@@ -1209,13 +1230,13 @@ def decrypt(ctx: click.Context, results_path: Path, output: Path) -> None:
     """
     Decrypt downloaded results locally.
 
-    Uses KMS to unwrap the result encryption key, then decrypts with AES-256-GCM.
-    Results are automatically extracted from the archive to the output directory.
+    Deprecated: Use 'byod get <job-id> -o <dir>' instead, which retrieves and decrypts in one step.
 
     \b
     Examples:
         byod decrypt ./results/ -o ./decrypted/
     """
+    console.print(format_warning("'byod decrypt' is deprecated. Use 'byod get <job-id> -o <dir>' instead."))
     import boto3
 
     console.print("\n[bold blue]Decrypting results...[/bold blue]\n")
@@ -1333,7 +1354,7 @@ def decrypt(ctx: click.Context, results_path: Path, output: Path) -> None:
         console.print(format_error(f"Decryption failed: {e}"))
         if ctx.obj.get("DEBUG"):
             console.print_exception()
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -1346,18 +1367,22 @@ def decrypt(ctx: click.Context, results_path: Path, output: Path) -> None:
 @click.option("-o", "--output", required=True, type=click.Path(path_type=Path), help="Output directory for decrypted results")
 @click.option("--keep-encrypted", is_flag=True, help="Keep intermediate encrypted files")
 @click.option("--overwrite", is_flag=True, help="Overwrite existing files in output directory")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 @click.pass_context
-def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, overwrite: bool) -> None:
+def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, overwrite: bool, output_format: str) -> None:
     """
     Retrieve and decrypt job results in one step.
 
     Downloads encrypted results from a completed job, unwraps the key via KMS,
     decrypts with AES-256-GCM, and extracts files to the output directory.
 
+    Replaces the separate 'retrieve' + 'decrypt' workflow.
+
     \b
     Examples:
         byod get genomic-qc-20250126-abc123 -o ./output/
         byod get genomic-qc-20250126-abc123 -o ./output/ --keep-encrypted
+        byod get genomic-qc-20250126-abc123 -o ./output/ --format json
     """
     import boto3
     import requests
@@ -1367,7 +1392,7 @@ def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, ove
 
     if output.exists() and any(output.iterdir()) and not overwrite:
         console.print(format_error(f"Output directory {output} is not empty. Use --overwrite."))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
     console.print(f"\n[bold blue]Retrieving and decrypting results for job {job_id}...[/bold blue]\n")
 
@@ -1379,15 +1404,28 @@ def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, ove
 
         output.mkdir(parents=True, exist_ok=True)
 
-        with console.status("[bold green]Downloading encrypted results..."):
-            response = requests.get(output_presigned.url, stream=True, timeout=300)
-            if not response.ok:
-                raise APIError(f"Download failed: {response.status_code}")
+        from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 
-            enc_path = output / "output.enc"
+        response = requests.get(output_presigned.url, stream=True, timeout=300)
+        if not response.ok:
+            raise APIError(f"Download failed: {response.status_code}")
+
+        total_size = int(response.headers.get("content-length", 0))
+        enc_path = output / "output.enc"
+
+        with Progress(
+            "[progress.description]{task.description}",
+            BarColumn(),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            console=console,
+            disable=ctx.obj.get("QUIET", False),
+        ) as progress:
+            task = progress.add_task("Downloading results...", total=total_size or None)
             with open(enc_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
+                    progress.advance(task, len(chunk))
 
         with console.status("[bold green]Downloading wrapped key..."):
             response = requests.get(key_presigned.url, timeout=60)
@@ -1454,40 +1492,48 @@ def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, ove
             for i in range(len(result_key)):
                 result_key[i] = 0
 
-        console.print(format_success("Results retrieved and decrypted!"))
-        console.print(f"\n  Job ID:          {job_id}")
-        console.print(f"  Decrypted size:  {format_bytes(len(plaintext))}")
-        console.print(f"  Output dir:      {output}")
-        console.print(f"  Files extracted: {len(extracted_files)}")
-        for fname in extracted_files[:10]:
-            console.print(f"    {fname}")
-        if len(extracted_files) > 10:
-            console.print(f"    ... and {len(extracted_files) - 10} more")
-        console.print()
+        if output_format == "json":
+            click.echo(json.dumps({
+                "job_id": job_id,
+                "output_dir": str(output),
+                "files": extracted_files,
+                "decrypted_size": len(plaintext),
+            }))
+        else:
+            console.print(format_success("Results retrieved and decrypted!"))
+            console.print(f"\n  Job ID:          {job_id}")
+            console.print(f"  Decrypted size:  {format_bytes(len(plaintext))}")
+            console.print(f"  Output dir:      {output}")
+            console.print(f"  Files extracted: {len(extracted_files)}")
+            for fname in extracted_files[:10]:
+                console.print(f"    {fname}")
+            if len(extracted_files) > 10:
+                console.print(f"    ... and {len(extracted_files) - 10} more")
+            console.print()
 
-        console.print(Panel(
-            "[bold green]Security Verification[/bold green]\n\n"
-            "  [green]OK[/green] Data was encrypted client-side before upload\n"
-            "  [green]OK[/green] Only the attested Nitro Enclave could decrypt the input\n"
-            "  [green]OK[/green] Enclave processed data and encrypted results with a new key\n"
-            "  [green]OK[/green] Result key was unwrapped via KMS\n"
-            "  [green]OK[/green] Results decrypted locally\n\n"
-            "  Plaintext data never existed outside the Nitro Enclave.",
-            title="Zero-Knowledge Processing",
-            border_style="green",
-        ))
+            console.print(Panel(
+                "[bold green]Security Verification[/bold green]\n\n"
+                "  [green]OK[/green] Data was encrypted client-side before upload\n"
+                "  [green]OK[/green] Only the attested Nitro Enclave could decrypt the input\n"
+                "  [green]OK[/green] Enclave processed data and encrypted results with a new key\n"
+                "  [green]OK[/green] Result key was unwrapped via KMS\n"
+                "  [green]OK[/green] Results decrypted locally\n\n"
+                "  Plaintext data never existed outside the Nitro Enclave.",
+                title="Zero-Knowledge Processing",
+                border_style="green",
+            ))
 
     except AuthenticationError as e:
         console.print(format_error(str(e)))
-        sys.exit(1)
+        sys.exit(EXIT_AUTH)
     except APIError as e:
         console.print(format_error(str(e)))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
     except Exception as e:
         console.print(format_error(f"Failed: {e}"))
         if ctx.obj.get("DEBUG"):
             console.print_exception()
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -1496,15 +1542,27 @@ def get(ctx: click.Context, job_id: str, output: Path, keep_encrypted: bool, ove
 
 
 @cli.command()
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 @click.pass_context
-def plugins(ctx: click.Context) -> None:
-    """List available pipeline plugins."""
+def plugins(ctx: click.Context, output_format: str) -> None:
+    """
+    List available pipeline plugins.
+
+    \b
+    Examples:
+        byod plugins
+        byod plugins --format json
+    """
     config = ctx.obj["CONFIG"]
     client = _get_api_client(config)
 
     try:
         with console.status("[bold green]Fetching plugins..."):
             plugin_list = client.list_plugins()
+
+        if output_format == "json":
+            click.echo(json.dumps(plugin_list))
+            return
 
         if not plugin_list:
             console.print("\nNo plugins available.\n")
@@ -1526,7 +1584,7 @@ def plugins(ctx: click.Context) -> None:
 
     except APIError as e:
         console.print(format_error(f"Failed to list plugins: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 # ============================================================================
@@ -1543,7 +1601,13 @@ def config() -> None:
 @config.command(name="show")
 @click.pass_context
 def config_show(ctx: click.Context) -> None:
-    """Display current configuration."""
+    """
+    Display current configuration.
+
+    \b
+    Examples:
+        byod config show
+    """
     config_mgr = ctx.obj["CONFIG"]
 
     table = Table(title="BYOD Configuration")
@@ -1566,6 +1630,148 @@ def config_show(ctx: click.Context) -> None:
 
 
 # ============================================================================
+# Profile Commands
+# ============================================================================
+
+
+@cli.group()
+def profile() -> None:
+    """Manage profiles for multiple tenants."""
+    pass
+
+
+@profile.command(name="list")
+@click.pass_context
+def profile_list(ctx: click.Context) -> None:
+    """List all profiles."""
+    config_mgr = ctx.obj["CONFIG"]
+    profiles = config_mgr.list_profiles()
+
+    if not profiles:
+        console.print("\nNo profiles configured.")
+        console.print("Run [cyan]byod auth login[/cyan] to create one.\n")
+        return
+
+    active = config_mgr.get_active_profile_name()
+    table = Table(title="Profiles")
+    table.add_column("Name", style="cyan")
+    table.add_column("Organization")
+    table.add_column("Region", style="dim")
+    table.add_column("Active", style="green")
+
+    for name in profiles:
+        p = config_mgr.get_profile(name)
+        table.add_row(
+            name,
+            p.get("organization_name", ""),
+            p.get("region", ""),
+            "✓" if name == active else "",
+        )
+
+    console.print(table)
+
+
+@profile.command(name="switch")
+@click.argument("name")
+@click.pass_context
+def profile_switch(ctx: click.Context, name: str) -> None:
+    """Switch the active profile."""
+    config_mgr = ctx.obj["CONFIG"]
+    try:
+        config_mgr.set_active_profile(name)
+        console.print(format_success(f"Switched to profile '{name}'."))
+    except ValueError as e:
+        console.print(format_error(str(e)))
+        console.print("\nAvailable profiles:")
+        for p in config_mgr.list_profiles():
+            console.print(f"  - {p}")
+        sys.exit(EXIT_ERROR)
+
+
+@profile.command(name="delete")
+@click.argument("name")
+@click.pass_context
+def profile_delete(ctx: click.Context, name: str) -> None:
+    """Delete a profile."""
+    config_mgr = ctx.obj["CONFIG"]
+    try:
+        config_mgr.delete_profile(name)
+        console.print(format_success(f"Deleted profile '{name}'."))
+    except ValueError as e:
+        console.print(format_error(str(e)))
+        sys.exit(EXIT_ERROR)
+
+
+@profile.command(name="show")
+@click.pass_context
+def profile_show(ctx: click.Context) -> None:
+    """Show current profile details."""
+    config_mgr = ctx.obj["CONFIG"]
+    active = config_mgr.get_active_profile_name()
+
+    if not active:
+        console.print("\nNo active profile.")
+        console.print("Run [cyan]byod auth login[/cyan] to create one.\n")
+        return
+
+    p = config_mgr.get_profile(active)
+    table = Table(title=f"Profile: {active}")
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value", style="green")
+
+    table.add_row("Tenant ID", p.get("tenant_id", ""))
+    table.add_row("Organization", p.get("organization_name", ""))
+    table.add_row("Region", p.get("region", ""))
+    table.add_row("Created", p.get("created_at", ""))
+
+    settings = p.get("settings", {})
+    if settings.get("kms_key_arn"):
+        table.add_row("KMS Key", settings["kms_key_arn"])
+    if settings.get("role_arn"):
+        table.add_row("IAM Role", settings["role_arn"])
+
+    console.print(table)
+
+
+# ============================================================================
+# Shell Completion Command
+# ============================================================================
+
+
+@cli.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completion(shell: str) -> None:
+    """Generate shell completion script.
+
+    \b
+    Usage:
+        eval "$(byod completion bash)"
+        eval "$(byod completion zsh)"
+        byod completion fish > ~/.config/fish/completions/byod.fish
+    """
+    shell_map = {
+        "bash": ("bash_source", "_BYOD_COMPLETE"),
+        "zsh": ("zsh_source", "_BYOD_COMPLETE"),
+        "fish": ("fish_source", "_BYOD_COMPLETE"),
+    }
+    source_func, env_var = shell_map[shell]
+
+    import importlib
+
+    try:
+        shell_complete = importlib.import_module("click.shell_completion")
+        cls = shell_complete.get_completion_class(shell)
+        if cls is None:
+            raise click.ClickException(f"Completion not supported for {shell}")
+        comp = cls(cli, {}, f"{env_var}", "byod")
+        click.echo(comp.source())
+    except (ImportError, AttributeError):
+        # Fallback for older Click versions
+        click.echo(f"# Set {env_var}={source_func} and source this script")
+        click.echo("# See Click docs for shell completion setup")
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
@@ -1579,7 +1785,7 @@ def main() -> None:
         sys.exit(130)
     except Exception as e:
         console.print(format_error(f"Unexpected error: {e}"))
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)
 
 
 if __name__ == "__main__":

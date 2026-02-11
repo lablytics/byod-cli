@@ -45,9 +45,8 @@ The CLI encrypts your file locally, uploads the ciphertext, and returns a job ID
 ### 5. Get results
 
 ```bash
-byod status <job-id>          # Check progress
-byod retrieve <job-id> -o ./results/   # Download encrypted results
-byod decrypt ./results/ -o ./output/   # Decrypt locally
+byod status <job-id>                      # Check progress
+byod get <job-id> -o ./output/            # Retrieve + decrypt in one step
 ```
 
 That's it. Your data was never visible to anyone outside the enclave.
@@ -65,10 +64,13 @@ That's it. Your data was never visible to anyone outside the enclave.
 | `byod submit <plugin> <file>` | Encrypt and submit data for processing |
 | `byod status <job-id>` | Check job status |
 | `byod list` | List your jobs |
-| `byod retrieve <job-id> -o <dir>` | Download encrypted results |
-| `byod decrypt <dir> -o <output>` | Decrypt results locally |
+| `byod get <job-id> -o <dir>` | Retrieve and decrypt results in one step |
 | `byod plugins` | List available processing plugins |
+| `byod profile list` | List configured profiles |
+| `byod profile switch <name>` | Switch active profile |
+| `byod profile show` | Show current profile details |
 | `byod config show` | Show current configuration |
+| `byod completion <shell>` | Generate shell completions (bash/zsh/fish) |
 
 ## Plugins
 
@@ -78,7 +80,8 @@ That's it. Your data was never visible to anyone outside the enclave.
 | `demo-count` | Line/word counting (for testing) | Any text file |
 
 ```bash
-byod plugins   # See all available plugins
+byod plugins                # See all available plugins
+byod plugins --format json  # JSON output for scripting
 ```
 
 ## Examples
@@ -97,7 +100,7 @@ byod submit genomic-qc ./sample.fastq.gz \
 echo '{"min_quality": 20}' > config.json
 byod submit genomic-qc ./sample.fastq.gz --config config.json
 
-# Wait for completion (blocks until done)
+# Wait for completion with live status updates
 byod submit genomic-qc ./sample.fastq.gz --wait --timeout 3600
 
 # List completed jobs
@@ -105,10 +108,23 @@ byod list --status completed
 
 # JSON output for scripting
 byod list --format json
+byod submit genomic-qc ./data.fastq --format json
+byod auth status --format json
+
+# Quiet mode for CI/CD (suppress progress output)
+byod --quiet submit genomic-qc ./sample.fastq.gz
+
+# Disable colored output
+byod --no-color list
 
 # Use API key via environment variable (useful for CI/CD)
 export BYOD_API_KEY=sk_live_xxxxx
-byod submit genomic-qc ./sample.fastq.gz
+byod --quiet submit genomic-qc ./sample.fastq.gz --format json
+
+# Shell completions
+eval "$(byod completion bash)"
+eval "$(byod completion zsh)"
+byod completion fish > ~/.config/fish/completions/byod.fish
 ```
 
 ## How Security Works
@@ -144,8 +160,19 @@ byod submit genomic-qc ./sample.fastq.gz
 | `BYOD_API_KEY` | API key (alternative to `byod auth login`) | — |
 | `BYOD_API_URL` | Custom API endpoint | `https://byod.cultivatedcode.co` |
 | `BYOD_DEBUG` | Enable debug logging (`1` or `true`) | `false` |
+| `NO_COLOR` | Disable colored output (any value) | — |
 | `AWS_PROFILE` | AWS credentials profile | `default` |
 | `AWS_REGION` | Region for KMS operations | `us-east-1` |
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | General error |
+| `2` | Authentication error |
+| `3` | Network error |
+| `4` | Resource not found |
 
 ## Troubleshooting
 
@@ -153,7 +180,7 @@ byod submit genomic-qc ./sample.fastq.gz
 
 **"No KMS key configured"** — Run `byod setup` to create your KMS key and IAM role.
 
-**"Failed to get AWS identity"** — Configure AWS credentials: `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+**"AWS credentials not found"** — Run `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
 **"AccessDenied when creating KMS key"** — Your AWS user needs: `kms:CreateKey`, `kms:CreateAlias`, `kms:PutKeyPolicy`, `iam:CreateRole`, `iam:PutRolePolicy`.
 
