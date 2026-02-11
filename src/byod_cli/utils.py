@@ -7,15 +7,21 @@ Common utilities for logging, formatting, and error handling.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+import os
 
 from rich.console import Console
 from rich.logging import RichHandler
 
-if TYPE_CHECKING:
-    pass
+# Respect NO_COLOR standard (https://no-color.org/)
+console = Console(no_color=os.environ.get("NO_COLOR") is not None)
 
-console = Console()
+
+def get_console(quiet: bool = False, no_color: bool = False) -> Console:
+    """Get a Console instance respecting quiet and no_color settings."""
+    _no_color = no_color or os.environ.get("NO_COLOR") is not None
+    if quiet:
+        return Console(quiet=True, no_color=_no_color)
+    return Console(no_color=_no_color)
 
 
 def setup_logging(level: str = "INFO") -> None:
