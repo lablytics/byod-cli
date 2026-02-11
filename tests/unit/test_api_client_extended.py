@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import responses
+
 from byod_cli.api_client import APIClient, APIError, AuthenticationError
 
 API_URL = "https://api.lablytics.test"

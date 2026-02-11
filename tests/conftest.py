@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
 from byod_cli.encryption import EncryptionManager
 
 

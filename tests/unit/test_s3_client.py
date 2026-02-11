@@ -9,8 +9,9 @@ import os
 
 import boto3
 import pytest
-from byod_cli.s3_client import S3Client
 from moto import mock_aws
+
+from byod_cli.s3_client import S3Client
 
 REGION = "us-east-1"
 DATA_BUCKET = "test-data"

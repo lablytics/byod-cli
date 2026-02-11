@@ -12,12 +12,13 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from click.testing import CliRunner
+
 from byod_cli.api_client import (
     PresignedDownload,
     TenantConfig,
 )
 from byod_cli.cli import _encrypt_data, cli
-from click.testing import CliRunner
 
 
 @pytest.fixture

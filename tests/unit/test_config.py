@@ -6,6 +6,7 @@ and global settings.
 
 
 import pytest
+
 from byod_cli.config import ConfigManager
 
 
