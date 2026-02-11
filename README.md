@@ -61,6 +61,7 @@ That's it. Your data was never visible to anyone outside the enclave.
 | `byod auth logout` | Clear stored credentials |
 | `byod auth status` | Check if you're authenticated |
 | `byod setup` | Create KMS key + IAM role in your AWS account |
+| `byod update-policy` | Update KMS key policy with latest enclave PCR0 values |
 | `byod submit <plugin> <file>` | Encrypt and submit data for processing |
 | `byod status <job-id>` | Check job status |
 | `byod list` | List your jobs |
@@ -68,6 +69,7 @@ That's it. Your data was never visible to anyone outside the enclave.
 | `byod plugins` | List available processing plugins |
 | `byod profile list` | List configured profiles |
 | `byod profile switch <name>` | Switch active profile |
+| `byod profile delete <name>` | Delete a profile |
 | `byod profile show` | Show current profile details |
 | `byod config show` | Show current configuration |
 | `byod completion <shell>` | Generate shell completions (bash/zsh/fish) |
