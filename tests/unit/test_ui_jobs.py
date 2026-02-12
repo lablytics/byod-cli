@@ -14,13 +14,13 @@ class TestListJobs:
         assert resp.status_code == 401
 
     @patch("byod_cli.api_client.APIClient")
-    def test_list_jobs_success(self, MockAPIClient, ui_client_authed):
+    def test_list_jobs_success(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.list_jobs.return_value = [
             {"job_id": "j1", "status": "completed", "plugin_name": "demo-count"},
             {"job_id": "j2", "status": "processing", "plugin_name": "genomic-qc"},
         ]
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/jobs")
         assert resp.status_code == 200
@@ -29,10 +29,10 @@ class TestListJobs:
         assert data[0]["job_id"] == "j1"
 
     @patch("byod_cli.api_client.APIClient")
-    def test_list_jobs_with_filters(self, MockAPIClient, ui_client_authed):
+    def test_list_jobs_with_filters(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.list_jobs.return_value = []
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/jobs?limit=10&status=completed&plugin=demo-count")
         assert resp.status_code == 200
@@ -41,10 +41,10 @@ class TestListJobs:
         )
 
     @patch("byod_cli.api_client.APIClient")
-    def test_list_jobs_api_error(self, MockAPIClient, ui_client_authed):
+    def test_list_jobs_api_error(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.list_jobs.side_effect = Exception("Service unavailable")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/jobs")
         assert resp.status_code == 502
@@ -55,24 +55,24 @@ class TestGetJob:
     """Tests for GET /api/jobs/{job_id}."""
 
     @patch("byod_cli.api_client.APIClient")
-    def test_get_job_success(self, MockAPIClient, ui_client_authed):
+    def test_get_job_success(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.get_job_status.return_value = {
             "job_id": "j1",
             "status": "completed",
             "plugin_name": "demo-count",
         }
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/jobs/j1")
         assert resp.status_code == 200
         assert resp.json()["job_id"] == "j1"
 
     @patch("byod_cli.api_client.APIClient")
-    def test_get_job_api_error(self, MockAPIClient, ui_client_authed):
+    def test_get_job_api_error(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.get_job_status.side_effect = Exception("Not found")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/jobs/nonexistent")
         assert resp.status_code == 502
@@ -191,10 +191,10 @@ class TestGetResults:
     """Tests for POST /api/jobs/{job_id}/get (SSE stream)."""
 
     @patch("byod_cli.api_client.APIClient")
-    def test_get_results_job_not_completed(self, MockAPIClient, ui_client_authed):
+    def test_get_results_job_not_completed(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.get_job_status.return_value = {"status": "processing"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.post("/api/jobs/j1/get")
         assert resp.status_code == 200
@@ -205,7 +205,7 @@ class TestGetResults:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_get_results_success(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_get_results_success(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         import os
 
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -236,7 +236,7 @@ class TestGetResults:
         tenant_config.kms_key_arn = None
         tenant_config.region = "us-east-1"
         mock_client.get_tenant_config.return_value = tenant_config
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         # Mock KMS decrypt
         mock_kms = MagicMock()
@@ -257,11 +257,11 @@ class TestGetResults:
                 assert "error" not in event_types
 
     @patch("byod_cli.api_client.APIClient")
-    def test_get_results_download_failure(self, MockAPIClient, ui_client_authed):
+    def test_get_results_download_failure(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.get_job_status.return_value = {"status": "completed"}
         mock_client.get_download_url.side_effect = Exception("Access denied")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         with tempfile.TemporaryDirectory() as tmp:
             results_base = Path(tmp)

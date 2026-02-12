@@ -7,9 +7,8 @@ associated-data binding that prevents key- and file-substitution attacks.
 import os
 
 import pytest
-from cryptography.exceptions import InvalidTag
-
 from byod_cli.encryption import EncryptionManager
+from cryptography.exceptions import InvalidTag
 
 # ---------------------------------------------------------------------------
 # DEK generation

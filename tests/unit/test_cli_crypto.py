@@ -6,9 +6,8 @@ These are simpler than EncryptionManager — no associated data, no file I/O.
 import os
 
 import pytest
-from cryptography.exceptions import InvalidTag
-
 from byod_cli.cli import NONCE_SIZE, _decrypt_data, _encrypt_data
+from cryptography.exceptions import InvalidTag
 
 
 class TestEncryptDecryptData:

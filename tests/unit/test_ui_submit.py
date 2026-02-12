@@ -70,7 +70,7 @@ class TestSubmitJob:
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
     def test_submit_single_file_success(
-        self, MockAPIClient, mock_boto3, mock_requests_post, ui_client_authed,
+        self, mock_api_client_cls, mock_boto3, mock_requests_post, ui_client_authed,
     ):
         mock_client = MagicMock()
 
@@ -86,7 +86,7 @@ class TestSubmitJob:
         submission.job_id = "new-job-123"
         submission.status = "submitted"
         mock_client.submit_job.return_value = submission
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         # Mock KMS generate_data_key
         dek = os.urandom(32)
@@ -122,7 +122,7 @@ class TestSubmitJob:
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
     def test_submit_multi_file_tar(
-        self, MockAPIClient, mock_boto3, mock_requests_post, ui_client_authed,
+        self, mock_api_client_cls, mock_boto3, mock_requests_post, ui_client_authed,
     ):
         mock_client = MagicMock()
         presigned = MagicMock()
@@ -135,7 +135,7 @@ class TestSubmitJob:
         submission.job_id = "multi-job-456"
         submission.status = "submitted"
         mock_client.submit_job.return_value = submission
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         dek = os.urandom(32)
         mock_kms = MagicMock()
@@ -198,7 +198,7 @@ class TestSubmitJob:
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
     def test_submit_upload_failure(
-        self, MockAPIClient, mock_boto3, mock_requests_post, ui_client_authed,
+        self, mock_api_client_cls, mock_boto3, mock_requests_post, ui_client_authed,
     ):
         mock_client = MagicMock()
         presigned = MagicMock()
@@ -206,7 +206,7 @@ class TestSubmitJob:
         presigned.fields = {}
         presigned.s3_key = "tenant/input.enc"
         mock_client.get_upload_url.return_value = presigned
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         dek = os.urandom(32)
         mock_kms = MagicMock()

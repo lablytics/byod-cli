@@ -8,8 +8,6 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
-
 from byod_cli.api_client import (
     APIError,
     JobSubmission,
@@ -17,6 +15,7 @@ from byod_cli.api_client import (
     TenantConfig,
 )
 from byod_cli.cli import cli
+from click.testing import CliRunner
 
 
 @pytest.fixture

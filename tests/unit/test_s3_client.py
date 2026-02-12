@@ -8,11 +8,11 @@ import json
 import os
 
 import boto3
+import cryptography.exceptions
 import pytest
 from botocore.exceptions import ClientError
-from moto import mock_aws
-
 from byod_cli.s3_client import S3Client
+from moto import mock_aws
 
 REGION = "us-east-1"
 DATA_BUCKET = "test-data"
@@ -378,7 +378,7 @@ class TestErrorScenarios:
         key2 = os.urandom(32)
         encrypted = S3Client._encrypt(b"secret", key1)
 
-        with pytest.raises(Exception):
+        with pytest.raises(cryptography.exceptions.InvalidTag):
             S3Client._decrypt(encrypted, key2)
 
     def test_decrypt_with_corrupted_data_raises(self):
@@ -388,5 +388,5 @@ class TestErrorScenarios:
         # Corrupt a byte in the ciphertext (after nonce)
         encrypted[15] ^= 0xFF
 
-        with pytest.raises(Exception):
+        with pytest.raises(cryptography.exceptions.InvalidTag):
             S3Client._decrypt(bytes(encrypted), key)

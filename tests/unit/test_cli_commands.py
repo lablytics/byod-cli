@@ -9,9 +9,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
-
 from byod_cli.cli import cli
+from click.testing import CliRunner
 
 
 @pytest.fixture

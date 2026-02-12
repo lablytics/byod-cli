@@ -16,10 +16,10 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_authenticated_tenant_valid(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_authenticated_tenant_valid(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_iam = MagicMock()
         mock_iam.get_role.return_value = {"Role": {}}
@@ -47,10 +47,10 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_authenticated_no_tenant(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_authenticated_no_tenant(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
         mock_boto3.return_value = MagicMock()
 
         resp = ui_client_authed.get("/api/status")
@@ -62,12 +62,12 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_auth_error(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_auth_error(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         from byod_cli.api_client import AuthenticationError
 
         mock_client = MagicMock()
         mock_client.verify_auth.side_effect = AuthenticationError("Invalid key")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
         mock_boto3.return_value = MagicMock()
 
         resp = ui_client_authed.get("/api/status")
@@ -76,10 +76,10 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_connection_error(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_connection_error(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.side_effect = ConnectionError("Connection refused")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
         mock_boto3.return_value = MagicMock()
 
         resp = ui_client_authed.get("/api/status")
@@ -89,10 +89,10 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_kms_key_disabled(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_kms_key_disabled(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_iam = MagicMock()
         mock_iam.get_role.return_value = {"Role": {}}
@@ -116,10 +116,10 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_kms_key_pending_deletion(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_kms_key_pending_deletion(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_iam = MagicMock()
         mock_iam.get_role.return_value = {"Role": {}}
@@ -142,12 +142,12 @@ class TestGetStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_status_role_not_found(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_status_role_not_found(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         from botocore.exceptions import ClientError
 
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_iam = MagicMock()
         mock_iam.get_role.side_effect = ClientError(

@@ -11,13 +11,13 @@ class TestListPlugins:
         assert resp.status_code == 401
 
     @patch("byod_cli.api_client.APIClient")
-    def test_list_plugins_success(self, MockAPIClient, ui_client_authed):
+    def test_list_plugins_success(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.list_plugins.return_value = [
             {"name": "genomic-qc", "description": "Quality control"},
             {"name": "demo-count", "description": "Line counting"},
         ]
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/plugins")
         assert resp.status_code == 200
@@ -27,10 +27,10 @@ class TestListPlugins:
         assert data[1]["name"] == "demo-count"
 
     @patch("byod_cli.api_client.APIClient")
-    def test_list_plugins_api_error(self, MockAPIClient, ui_client_authed):
+    def test_list_plugins_api_error(self, mock_api_client_cls, ui_client_authed):
         mock_client = MagicMock()
         mock_client.list_plugins.side_effect = Exception("Connection refused")
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.get("/api/plugins")
         assert resp.status_code == 502

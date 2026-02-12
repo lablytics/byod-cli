@@ -44,10 +44,10 @@ class TestSetupStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_setup_status_fully_configured(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_setup_status_fully_configured(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_sts = MagicMock()
         mock_sts.get_caller_identity.return_value = {"Account": "123456789"}
@@ -79,12 +79,12 @@ class TestSetupStatus:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_setup_status_role_deleted(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_setup_status_role_deleted(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         from botocore.exceptions import ClientError
 
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc"}
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_sts = MagicMock()
         mock_sts.get_caller_identity.return_value = {"Account": "123456789"}
@@ -123,10 +123,10 @@ class TestRunSetup:
 
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_run_setup_no_tenant(self, MockAPIClient, mock_boto3, ui_client_authed):
+    def test_run_setup_no_tenant(self, mock_api_client_cls, mock_boto3, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {}  # No tenant_id
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         resp = ui_client_authed.post("/api/setup/run", json={"region": "us-east-1"})
         events = _parse_sse(resp.text)
@@ -137,7 +137,7 @@ class TestRunSetup:
     @patch("asyncio.sleep", return_value=None)
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_run_setup_happy_path(self, MockAPIClient, mock_boto3, mock_sleep, ui_client_authed):
+    def test_run_setup_happy_path(self, mock_api_client_cls, mock_boto3, mock_sleep, ui_client_authed):
         mock_client = MagicMock()
         mock_client.verify_auth.return_value = {"tenant_id": "tenant-abc123"}
         mock_client.get_enclave_info.return_value = {
@@ -146,7 +146,7 @@ class TestRunSetup:
             "account_id": "506587498939",
         }
         mock_client.register_kms_setup.return_value = None
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_sts = MagicMock()
         mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
@@ -188,7 +188,7 @@ class TestRunSetup:
     @patch("asyncio.sleep", return_value=None)
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_run_setup_role_already_exists(self, MockAPIClient, mock_boto3, mock_sleep, ui_client_authed):
+    def test_run_setup_role_already_exists(self, mock_api_client_cls, mock_boto3, mock_sleep, ui_client_authed):
         from botocore.exceptions import ClientError
 
         mock_client = MagicMock()
@@ -198,7 +198,7 @@ class TestRunSetup:
             "account_id": "506587498939",
         }
         mock_client.register_kms_setup.return_value = None
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_sts = MagicMock()
         mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
@@ -239,7 +239,7 @@ class TestRunSetup:
     @patch("asyncio.sleep", return_value=None)
     @patch("boto3.client")
     @patch("byod_cli.api_client.APIClient")
-    def test_run_setup_kms_failure(self, MockAPIClient, mock_boto3, mock_sleep, ui_client_authed):
+    def test_run_setup_kms_failure(self, mock_api_client_cls, mock_boto3, mock_sleep, ui_client_authed):
         from botocore.exceptions import ClientError
 
         mock_client = MagicMock()
@@ -248,7 +248,7 @@ class TestRunSetup:
             "pcr0": "abc123",
             "account_id": "506587498939",
         }
-        MockAPIClient.return_value = mock_client
+        mock_api_client_cls.return_value = mock_client
 
         mock_sts = MagicMock()
         mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}

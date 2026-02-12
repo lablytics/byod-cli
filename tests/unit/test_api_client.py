@@ -2,7 +2,6 @@
 
 import pytest
 import responses
-
 from byod_cli.api_client import APIClient, APIError, AuthenticationError
 
 BASE_URL = "https://byod.test.local"

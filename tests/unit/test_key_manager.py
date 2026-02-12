@@ -6,7 +6,6 @@ Covers key generation, storage, retrieval, listing, rotation, and deletion.
 import json
 
 import pytest
-
 from byod_cli.key_manager import KeyManager
 
 

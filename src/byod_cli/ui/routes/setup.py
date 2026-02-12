@@ -376,7 +376,7 @@ async def run_setup(request: Request, body: SetupRequest):
                     )
                 except ClientError:
                     pass  # Alias might already exist
-            except ClientError as e:
+            except ClientError:
                 logger.exception("KMS key creation failed")
                 yield _sse("error", {"message": "Failed to create KMS key. Check your AWS permissions."})
                 return
@@ -399,7 +399,7 @@ async def run_setup(request: Request, body: SetupRequest):
                     PolicyName="BYODKMSAccess",
                     PolicyDocument=json.dumps(role_policy),
                 )
-            except ClientError as e:
+            except ClientError:
                 logger.exception("Failed to attach KMS policy to IAM role")
                 yield _sse("error", {"message": "Failed to attach KMS permissions to role. Check your AWS permissions."})
                 return
@@ -415,7 +415,7 @@ async def run_setup(request: Request, body: SetupRequest):
                     aws_account_id=aws_account_id,
                     region=body.region,
                 )
-            except Exception as e:
+            except Exception:
                 logger.exception("Registration with Lablytics failed")
                 yield _sse("error", {
                     "message": "Registration failed. "
@@ -441,7 +441,7 @@ async def run_setup(request: Request, body: SetupRequest):
                 "aws_account_id": aws_account_id,
                 "region": body.region,
             })
-        except Exception as e:
+        except Exception:
             logger.exception("Setup failed unexpectedly")
             yield _sse("error", {"message": "An unexpected error occurred during setup. Check the CLI logs for details."})
 

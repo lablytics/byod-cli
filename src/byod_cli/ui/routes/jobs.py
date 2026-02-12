@@ -93,7 +93,7 @@ async def get_results(request: Request, job_id: str):
             try:
                 output_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output.enc")
                 await asyncio.to_thread(client.download_file, output_presigned, output_dir / "output.enc")
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to download results for job %s", job_id)
                 yield _sse("error", {"message": "Failed to download results. Check the CLI logs for details."})
                 return
@@ -104,7 +104,7 @@ async def get_results(request: Request, job_id: str):
             try:
                 key_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output_key.bin")
                 await asyncio.to_thread(client.download_file, key_presigned, output_dir / "output_key.bin")
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to download wrapped key for job %s", job_id)
                 yield _sse("error", {"message": "Failed to download wrapped key. Check the CLI logs for details."})
                 return
@@ -116,7 +116,7 @@ async def get_results(request: Request, job_id: str):
                 tenant_config = await asyncio.to_thread(client.get_tenant_config)
                 kms_key_id = tenant_config.customer_kms_key_arn or tenant_config.kms_key_arn
                 kms_region = tenant_config.region
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to get tenant config for job %s", job_id)
                 yield _sse("error", {"message": "Failed to get tenant configuration. Check your API key and network."})
                 return
@@ -137,7 +137,7 @@ async def get_results(request: Request, job_id: str):
                     KeyId=kms_key_id,
                 )
                 result_key = decrypt_response["Plaintext"]
-            except Exception as e:
+            except Exception:
                 logger.exception("KMS key unwrap failed for job %s", job_id)
                 yield _sse("error", {"message": "KMS key unwrap failed. Check your AWS credentials and KMS key permissions."})
                 return
@@ -153,7 +153,7 @@ async def get_results(request: Request, job_id: str):
                 ciphertext = encrypted_data[NONCE_SIZE:]
                 aesgcm = AESGCM(result_key)
                 plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-            except Exception as e:
+            except Exception:
                 logger.exception("Decryption failed for job %s", job_id)
                 yield _sse("error", {"message": "Decryption failed. The data may be corrupted or the key may not match."})
                 return
@@ -195,7 +195,7 @@ async def get_results(request: Request, job_id: str):
                 "output_dir": str(decrypted_dir),
                 "files": extracted_files,
             })
-        except Exception as e:
+        except Exception:
             logger.exception("Unexpected error retrieving results for job %s", job_id)
             yield _sse("error", {"message": "An unexpected error occurred. Check the CLI logs for details."})
 
