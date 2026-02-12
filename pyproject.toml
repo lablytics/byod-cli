@@ -49,6 +49,9 @@ dependencies = [
     "boto3>=1.28.0",
     "tqdm>=4.66.0",
     "requests>=2.31.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +80,13 @@ include = [
     "/src",
     "LICENSE",
     "README.md",
+]
+exclude = [
+    "src/byod_cli/ui/frontend/node_modules",
+    "src/byod_cli/ui/frontend/src",
+    "src/byod_cli/ui/frontend/*.json",
+    "src/byod_cli/ui/frontend/*.ts",
+    "src/byod_cli/ui/frontend/*.html",
 ]
 
 [tool.hatch.build.targets.wheel]

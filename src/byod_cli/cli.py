@@ -1772,6 +1772,46 @@ def completion(shell: str) -> None:
 
 
 # ============================================================================
+# Local Web UI
+# ============================================================================
+
+
+@cli.command()
+@click.option("--port", type=int, default=8420, help="Port for local UI server")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--no-browser", is_flag=True, help="Don't auto-open browser")
+def ui(port: int, host: str, no_browser: bool) -> None:
+    """Launch the local web UI for graphical job submission and monitoring.
+
+    \b
+    Starts a local server for drag-and-drop file submission,
+    visual job tracking, and one-click result retrieval.
+
+    \b
+    All encryption happens locally — same security model as the CLI.
+
+    \b
+    Examples:
+        byod ui                    # Opens http://localhost:8420
+        byod ui --port 9000        # Custom port
+        byod ui --no-browser       # Don't auto-open browser
+    """
+    try:
+        from byod_cli.ui import launch_ui
+    except ImportError:
+        console.print(format_error(
+            "UI dependencies not installed. Run: pip install 'byod-cli[ui]'"
+        ))
+        sys.exit(EXIT_ERROR)
+
+    console.print(
+        "\n[bold]BYOD Local UI[/bold] — "
+        "[dim]All encryption happens on your machine[/dim]\n"
+    )
+    launch_ui(host=host, port=port, open_browser=not no_browser)
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 

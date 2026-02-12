@@ -1,0 +1,1 @@
+import{j as a}from"./index-eBHcrhee.js";const n={completed:"badge-completed",processing:"badge-processing",downloading:"badge-downloading",uploading:"badge-uploading",failed:"badge-failed",pending:"badge-pending",submitted:"badge-submitted"};function o({status:e}){const d=n[e.toLowerCase()]||"badge-pending";return a.jsx("span",{className:`badge ${d}`,children:e})}export{o as S};
