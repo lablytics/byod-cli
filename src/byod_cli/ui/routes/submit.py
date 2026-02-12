@@ -3,13 +3,20 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import tarfile
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["submit"])
+
+# Maximum total upload size (500 MB). Protects against memory exhaustion
+# since uploaded files are buffered in memory for encryption.
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
 
 @router.post("/submit")
@@ -48,8 +55,15 @@ async def submit_job(
 
     # Read all uploaded file contents upfront (before streaming response)
     file_contents: list[tuple[str, bytes]] = []
+    total_size = 0
     for f in files:
         content = await f.read()
+        total_size += len(content)
+        if total_size > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Total upload size exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+            )
         file_contents.append((f.filename or "upload", content))
 
     async def _stream():
@@ -167,7 +181,8 @@ async def submit_job(
                 "status": submission.status,
             })
         except Exception as e:
-            yield _sse("error", {"message": str(e)})
+            logger.exception("Job submission failed")
+            yield _sse("error", {"message": _sanitize_error(e)})
         finally:
             # Clean up temp files
             if tmp_dir:
@@ -188,3 +203,22 @@ def _format_bytes(size: int) -> str:
             return f"{size:.1f} {unit}" if unit != "B" else f"{size} {unit}"
         size /= 1024
     return f"{size:.1f} TB"
+
+
+def _sanitize_error(exc: Exception) -> str:
+    """Return a safe error message — no AWS ARNs, key IDs, or account details."""
+    from byod_cli.api_client import APIError, AuthenticationError
+
+    if isinstance(exc, AuthenticationError):
+        return "Authentication failed. Check your API key."
+    if isinstance(exc, APIError):
+        return f"API error: {exc}"
+
+    msg = str(exc).lower()
+    if "kms" in msg or "decrypt" in msg or "encrypt" in msg:
+        return "Encryption operation failed. Check your KMS key configuration."
+    if "connect" in msg or "timeout" in msg:
+        return "Connection failed. Check your network and API URL."
+    if "credential" in msg or "access denied" in msg or "not authorized" in msg:
+        return "AWS access denied. Check your credentials and permissions."
+    return "An unexpected error occurred. Check the CLI logs for details."

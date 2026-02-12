@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["setup"])
 
@@ -65,11 +68,12 @@ async def setup_status(request: Request):
                 "Run 'byod auth login' to re-authenticate."
             )
         except Exception as e:
-            err = str(e)
-            if "connect" in err.lower() or "timeout" in err.lower():
-                result["tenant_error"] = f"Cannot reach API server at {config.get_api_url()}"
+            logger.warning("Tenant verification failed: %s", e)
+            err = str(e).lower()
+            if "connect" in err or "timeout" in err:
+                result["tenant_error"] = "Cannot reach API server. Check your network connection."
             else:
-                result["tenant_error"] = f"API error: {err}"
+                result["tenant_error"] = "Failed to verify tenant. Check your API key and network."
 
     # Verify KMS key and role actually exist in AWS (not just in local config)
     profile_name = config.get_active_profile_name()
@@ -101,9 +105,11 @@ async def setup_status(request: Request):
                 if code == "NoSuchEntity":
                     result["role_error"] = "IAM role no longer exists in AWS"
                 else:
-                    result["role_error"] = f"Cannot verify role: {e}"
+                    logger.warning("Cannot verify IAM role: %s", e)
+                    result["role_error"] = "Cannot verify role. Check AWS credentials."
             except Exception as e:
-                result["role_error"] = f"AWS error: {e}"
+                logger.warning("AWS error checking role: %s", e)
+                result["role_error"] = "AWS error checking role. Check credentials and network."
 
         if kms_key_arn:
             try:
@@ -123,9 +129,11 @@ async def setup_status(request: Request):
                 if code == "NotFoundException":
                     result["kms_key_error"] = "KMS key no longer exists in AWS"
                 else:
-                    result["kms_key_error"] = f"Cannot verify key: {e}"
+                    logger.warning("Cannot verify KMS key: %s", e)
+                    result["kms_key_error"] = "Cannot verify KMS key. Check AWS credentials."
             except Exception as e:
-                result["kms_key_error"] = f"AWS error: {e}"
+                logger.warning("AWS error checking KMS key: %s", e)
+                result["kms_key_error"] = "AWS error checking KMS key. Check credentials and network."
 
     # Only mark registered if both actually exist
     if result["kms_key_configured"] and result["role_configured"]:
@@ -222,10 +230,11 @@ async def run_setup(request: Request, body: SetupRequest):
                     await asyncio.to_thread(iam.delete_role, RoleName=iam_role_name)
                 except ClientError as e:
                     if e.response["Error"]["Code"] != "NoSuchEntity":
+                        logger.warning("Could not delete IAM role during cleanup: %s", e)
                         yield _sse("progress", {
                             "stage": "cleanup",
                             "percent": 24,
-                            "message": f"Warning: could not delete IAM role: {e}",
+                            "message": "Warning: could not delete existing IAM role",
                         })
 
                 # Schedule KMS key for deletion via alias
@@ -240,10 +249,11 @@ async def run_setup(request: Request, body: SetupRequest):
                     )
                 except ClientError as e:
                     if e.response["Error"]["Code"] != "NotFoundException":
+                        logger.warning("Could not delete KMS key during cleanup: %s", e)
                         yield _sse("progress", {
                             "stage": "cleanup",
                             "percent": 26,
-                            "message": f"Warning: could not delete KMS key: {e}",
+                            "message": "Warning: could not delete existing KMS key",
                         })
 
                 yield _sse("progress", {"stage": "cleanup_done", "percent": 28, "message": "Existing resources cleaned up"})
@@ -287,7 +297,8 @@ async def run_setup(request: Request, body: SetupRequest):
                         PolicyDocument=json.dumps(trust_policy),
                     )
                 else:
-                    yield _sse("error", {"message": f"Failed to create IAM role: {e}"})
+                    logger.exception("Failed to create IAM role")
+                    yield _sse("error", {"message": "Failed to create IAM role. Check your AWS permissions."})
                     return
 
             # Create KMS key with attestation policy (4 statements, matching CLI)
@@ -366,7 +377,8 @@ async def run_setup(request: Request, body: SetupRequest):
                 except ClientError:
                     pass  # Alias might already exist
             except ClientError as e:
-                yield _sse("error", {"message": f"KMS operation failed: {e}"})
+                logger.exception("KMS key creation failed")
+                yield _sse("error", {"message": "Failed to create KMS key. Check your AWS permissions."})
                 return
 
             # Attach KMS permissions to the IAM role
@@ -388,7 +400,8 @@ async def run_setup(request: Request, body: SetupRequest):
                     PolicyDocument=json.dumps(role_policy),
                 )
             except ClientError as e:
-                yield _sse("error", {"message": f"Failed to attach policy: {e}"})
+                logger.exception("Failed to attach KMS policy to IAM role")
+                yield _sse("error", {"message": "Failed to attach KMS permissions to role. Check your AWS permissions."})
                 return
 
             # Register with Lablytics
@@ -403,9 +416,11 @@ async def run_setup(request: Request, body: SetupRequest):
                     region=body.region,
                 )
             except Exception as e:
+                logger.exception("Registration with Lablytics failed")
                 yield _sse("error", {
-                    "message": f"Registration failed: {e}. "
-                    "AWS resources were created but not registered with Lablytics.",
+                    "message": "Registration failed. "
+                    "AWS resources were created but not registered with Lablytics. "
+                    "Check the CLI logs for details.",
                 })
                 return
 
@@ -427,7 +442,8 @@ async def run_setup(request: Request, body: SetupRequest):
                 "region": body.region,
             })
         except Exception as e:
-            yield _sse("error", {"message": str(e)})
+            logger.exception("Setup failed unexpectedly")
+            yield _sse("error", {"message": "An unexpected error occurred during setup. Check the CLI logs for details."})
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 

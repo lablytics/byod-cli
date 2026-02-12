@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import logging
 import mimetypes
 import tarfile
 import tempfile
@@ -12,6 +13,8 @@ from typing import Optional
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["jobs"])
 
@@ -43,7 +46,8 @@ async def list_jobs(
         jobs = await asyncio.to_thread(client.list_jobs, limit=limit, status=status, plugin=plugin)
         return jobs
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.exception("Failed to list jobs")
+        raise HTTPException(status_code=502, detail="Failed to fetch jobs. Check your API key and network.") from e
 
 
 @router.get("/jobs/{job_id}")
@@ -54,7 +58,8 @@ async def get_job(request: Request, job_id: str):
         job = await asyncio.to_thread(client.get_job_status, job_id)
         return job
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.exception("Failed to get job %s", job_id)
+        raise HTTPException(status_code=502, detail="Failed to fetch job details. Check your API key and network.") from e
 
 
 @router.post("/jobs/{job_id}/get")
@@ -89,7 +94,8 @@ async def get_results(request: Request, job_id: str):
                 output_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output.enc")
                 await asyncio.to_thread(client.download_file, output_presigned, output_dir / "output.enc")
             except Exception as e:
-                yield _sse("error", {"message": f"Failed to download results: {e}"})
+                logger.exception("Failed to download results for job %s", job_id)
+                yield _sse("error", {"message": "Failed to download results. Check the CLI logs for details."})
                 return
 
             # Step 2: Download wrapped key
@@ -99,7 +105,8 @@ async def get_results(request: Request, job_id: str):
                 key_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output_key.bin")
                 await asyncio.to_thread(client.download_file, key_presigned, output_dir / "output_key.bin")
             except Exception as e:
-                yield _sse("error", {"message": f"Failed to download key: {e}"})
+                logger.exception("Failed to download wrapped key for job %s", job_id)
+                yield _sse("error", {"message": "Failed to download wrapped key. Check the CLI logs for details."})
                 return
 
             # Step 3: Get tenant config for KMS region
@@ -110,7 +117,8 @@ async def get_results(request: Request, job_id: str):
                 kms_key_id = tenant_config.customer_kms_key_arn or tenant_config.kms_key_arn
                 kms_region = tenant_config.region
             except Exception as e:
-                yield _sse("error", {"message": f"Failed to get tenant config: {e}"})
+                logger.exception("Failed to get tenant config for job %s", job_id)
+                yield _sse("error", {"message": "Failed to get tenant configuration. Check your API key and network."})
                 return
 
             # Step 4: Unwrap key via KMS
@@ -130,7 +138,8 @@ async def get_results(request: Request, job_id: str):
                 )
                 result_key = decrypt_response["Plaintext"]
             except Exception as e:
-                yield _sse("error", {"message": f"KMS key unwrap failed: {e}"})
+                logger.exception("KMS key unwrap failed for job %s", job_id)
+                yield _sse("error", {"message": "KMS key unwrap failed. Check your AWS credentials and KMS key permissions."})
                 return
 
             # Step 5: AES-256-GCM decrypt
@@ -145,7 +154,8 @@ async def get_results(request: Request, job_id: str):
                 aesgcm = AESGCM(result_key)
                 plaintext = aesgcm.decrypt(nonce, ciphertext, None)
             except Exception as e:
-                yield _sse("error", {"message": f"Decryption failed: {e}"})
+                logger.exception("Decryption failed for job %s", job_id)
+                yield _sse("error", {"message": "Decryption failed. The data may be corrupted or the key may not match."})
                 return
 
             # Step 6: Extract results
@@ -186,7 +196,8 @@ async def get_results(request: Request, job_id: str):
                 "files": extracted_files,
             })
         except Exception as e:
-            yield _sse("error", {"message": str(e)})
+            logger.exception("Unexpected error retrieving results for job %s", job_id)
+            yield _sse("error", {"message": "An unexpected error occurred. Check the CLI logs for details."})
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 

@@ -48,7 +48,7 @@ class TestListJobs:
 
         resp = ui_client_authed.get("/api/jobs")
         assert resp.status_code == 502
-        assert "Service unavailable" in resp.json()["detail"]
+        assert "Failed to fetch jobs" in resp.json()["detail"]
 
 
 class TestGetJob:
