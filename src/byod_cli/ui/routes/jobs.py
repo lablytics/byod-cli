@@ -7,6 +7,7 @@ import mimetypes
 import tarfile
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -33,8 +34,8 @@ def _get_api_client(request: Request):
 async def list_jobs(
     request: Request,
     limit: int = Query(50, ge=1, le=200),
-    status: str | None = Query(None),
-    plugin: str | None = Query(None),
+    status: Optional[str] = Query(None),
+    plugin: Optional[str] = Query(None),
 ):
     """List jobs with optional filters."""
     client = _get_api_client(request)
