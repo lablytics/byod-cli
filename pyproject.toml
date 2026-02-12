@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "byod-cli"
-version = "1.0.4"
+version = "1.0.5"
 description = "Command-line interface for Lablytics BYOD - Secure biotech data processing with zero-knowledge encryption"
 readme = "README.md"
 license = "MIT"
