@@ -8,9 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
+from click.testing import CliRunner
+
 from byod_cli.api_client import APIError
 from byod_cli.cli import cli
-from click.testing import CliRunner
 
 
 @pytest.fixture

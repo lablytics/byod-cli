@@ -6,8 +6,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from byod_cli.encryption import EncryptionManager
 from fastapi.testclient import TestClient
+
+from byod_cli.encryption import EncryptionManager
 
 
 @pytest.fixture
@@ -121,8 +122,9 @@ def _create_test_app(mock_cfg):
 
     Sets app.state.config directly (no lifespan) so TestClient can access it.
     """
-    from byod_cli.ui.routes import jobs, plugins, settings, setup, status, submit
     from fastapi import FastAPI
+
+    from byod_cli.ui.routes import jobs, plugins, settings, setup, status, submit
 
     app = FastAPI()
     app.state.config = mock_cfg

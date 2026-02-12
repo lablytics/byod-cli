@@ -8,8 +8,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from byod_cli.cli import EXIT_AUTH, EXIT_ERROR, EXIT_NETWORK, EXIT_OK, cli
 from click.testing import CliRunner
+
+from byod_cli.cli import EXIT_AUTH, EXIT_ERROR, EXIT_NETWORK, EXIT_OK, cli
 
 
 @pytest.fixture
