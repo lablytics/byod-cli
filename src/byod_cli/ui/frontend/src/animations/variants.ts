@@ -137,3 +137,29 @@ export const spinVariants: Variants = {
     }
   }
 };
+
+export const drawPath: Variants = {
+  initial: { pathLength: 0, opacity: 0 },
+  animate: {
+    pathLength: 1,
+    opacity: 1,
+    transition: { duration: 0.6, ease: 'easeOut' }
+  }
+};
+
+export const successContainer: Variants = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: { staggerChildren: 0.15, delayChildren: 0.3 }
+  }
+};
+
+export const successItem: Variants = {
+  initial: { opacity: 0, y: 20 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 24 }
+  }
+};

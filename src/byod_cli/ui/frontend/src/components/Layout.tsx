@@ -1,17 +1,14 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { pageVariants } from "../animations/variants";
 
-const navStyle = (isActive: boolean) => ({
-  color: isActive ? "#6366f1" : "#8b8fa3",
-  fontWeight: isActive ? 700 : 400,
-  padding: "8px 16px",
-  borderRadius: "8px",
-  background: isActive ? "rgba(99,102,241,0.1)" : "transparent",
-  fontSize: "14px",
-  transition: "all 0.2s ease",
-  textDecoration: "none" as const,
-});
+const navLinks = [
+  { to: "/", label: "Home", match: (p: string) => p === "/" },
+  { to: "/submit", label: "Submit Job", match: (p: string) => p.startsWith("/submit") },
+  { to: "/jobs", label: "Jobs", match: (p: string) => p.startsWith("/jobs") },
+  { to: "/setup", label: "Setup", match: (p: string) => p.startsWith("/setup") },
+  { to: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },
+];
 
 export function Layout() {
   const location = useLocation();
@@ -63,22 +60,27 @@ export function Layout() {
           </span>
         </div>
 
-        <nav style={{ display: "flex", gap: "4px", flex: 1, alignItems: "center" }}>
-          <NavLink to="/" end style={({ isActive }) => navStyle(isActive)}>
-            Home
-          </NavLink>
-          <NavLink to="/submit" style={({ isActive }) => navStyle(isActive)}>
-            Submit Job
-          </NavLink>
-          <NavLink to="/jobs" style={({ isActive }) => navStyle(isActive)}>
-            Jobs
-          </NavLink>
-          <NavLink to="/setup" style={({ isActive }) => navStyle(isActive)}>
-            Setup
-          </NavLink>
-          <NavLink to="/settings" style={({ isActive }) => navStyle(isActive)}>
-            Settings
-          </NavLink>
+        <nav className="nav-bar">
+          {navLinks.map((link) => {
+            const isActive = link.match(location.pathname);
+            return (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`nav-link ${isActive ? "active" : ""}`}
+              >
+                {link.label}
+                {isActive && (
+                  <motion.div
+                    className="nav-indicator"
+                    layoutId="nav-indicator"
+                    style={{ position: "absolute", bottom: -1, left: 8, right: 8, height: 2 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
         <div
@@ -90,7 +92,7 @@ export function Layout() {
             color: "var(--text-dim)",
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.5" aria-hidden="true">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           Encrypted locally

@@ -6,6 +6,7 @@ import { apiFetch } from "../hooks/useApi";
 import { StatusBadge } from "../components/StatusBadge";
 import { ProgressTracker } from "../components/ProgressTracker";
 import { useSSE } from "../hooks/useSSE";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 
 interface JobData {
   job_id: string;
@@ -139,7 +140,22 @@ export function JobDetail() {
     });
   };
 
-  if (loading) return <div className="loading">Loading job details...</div>;
+  if (loading) return (
+    <div>
+      <div style={{ marginBottom: "16px" }}>
+        <Skeleton width={100} height={14} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+        <Skeleton width={200} height={28} />
+        <Skeleton width={80} height={24} style={{ borderRadius: 12 }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={2} />
+      </div>
+      <SkeletonCard lines={4} />
+    </div>
+  );
   if (error) return <div className="error-message">{error}</div>;
   if (!job) return <div className="error-message">Job not found</div>;
 

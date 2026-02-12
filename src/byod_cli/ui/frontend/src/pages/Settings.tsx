@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { staggerContainer, staggerItem, fadeInUp } from "../animations/variants";
 import { apiFetch } from "../hooks/useApi";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 
 interface Profile {
   name: string;
@@ -43,7 +44,19 @@ export function Settings() {
     );
   };
 
-  if (loading) return <div className="loading">Loading settings...</div>;
+  if (loading) return (
+    <div>
+      <div className="page-header">
+        <Skeleton width={120} height={24} style={{ marginBottom: 8 }} />
+        <Skeleton width={250} height={14} />
+      </div>
+      <SkeletonCard lines={4} />
+      <div style={{ marginTop: 24 }}>
+        <Skeleton width={100} height={16} style={{ marginBottom: 16 }} />
+        <SkeletonCard lines={3} />
+      </div>
+    </div>
+  );
 
   return (
     <motion.div variants={fadeInUp} initial="initial" animate="animate">

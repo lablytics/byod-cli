@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "../animations/variants";
 import { useApi } from "../hooks/useApi";
 import { StatusBadge } from "../components/StatusBadge";
+import { SkeletonTable } from "../components/Skeleton";
 
 interface StatusData {
   authenticated: boolean;
@@ -25,6 +26,33 @@ interface Job {
   plugin_name: string;
   status: string;
   created_at: string;
+}
+
+function AnimatedCounter({ value, color }: { value: number; color?: string }) {
+  const [display, setDisplay] = useState(0);
+  const prevRef = useRef(0);
+
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = value;
+    if (start === end) return;
+
+    const duration = 400;
+    const startTime = performance.now();
+
+    function tick(now: number) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+      else prevRef.current = end;
+    }
+
+    requestAnimationFrame(tick);
+  }, [value]);
+
+  return <span style={color ? { color } : undefined}>{display}</span>;
 }
 
 export function Home() {
@@ -193,13 +221,19 @@ export function Home() {
       >
         <motion.div className="stat-card" variants={staggerItem}>
           <div className="label">Authentication</div>
-          <div className="value" style={{ fontSize: "18px" }}>
+          <div className="value" style={{ fontSize: "20px" }}>
             {statusLoading ? (
               <span className="loading-spinner" />
             ) : status?.authenticated ? (
-              <span style={{ color: "var(--green)" }}>Connected</span>
+              <span style={{ color: "var(--green)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+                Connected
+              </span>
             ) : (
-              <span style={{ color: "var(--red)" }}>Not authenticated</span>
+              <span style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" /></svg>
+                Not authenticated
+              </span>
             )}
           </div>
           {status?.profile && (
@@ -211,15 +245,21 @@ export function Home() {
 
         <motion.div className="stat-card" variants={staggerItem}>
           <div className="label">Tenant</div>
-          <div className="value" style={{ fontSize: "18px" }}>
+          <div className="value" style={{ fontSize: "20px" }}>
             {statusLoading ? (
               <span className="loading-spinner" />
             ) : tenantOk ? (
-              <span style={{ color: "var(--green)" }}>Active</span>
+              <span style={{ color: "var(--green)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+                Active
+              </span>
             ) : status?.authenticated ? (
-              <span style={{ color: "var(--red)" }}>Invalid</span>
+              <span style={{ color: "var(--red)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" /></svg>
+                Invalid
+              </span>
             ) : (
-              <span style={{ color: "var(--text-dim)" }}>—</span>
+              <span style={{ color: "var(--text-dim)" }}>&mdash;</span>
             )}
           </div>
           {status?.tenant_id && (
@@ -231,20 +271,26 @@ export function Home() {
 
         <motion.div className="stat-card" variants={staggerItem}>
           <div className="label">AWS Credentials</div>
-          <div className="value" style={{ fontSize: "18px" }}>
+          <div className="value" style={{ fontSize: "20px" }}>
             {awsOk === null ? (
               <span className="loading-spinner" />
             ) : awsOk ? (
-              <span style={{ color: "var(--green)" }}>Configured</span>
+              <span style={{ color: "var(--green)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+                Configured
+              </span>
             ) : (
-              <span style={{ color: "var(--yellow)" }}>Not found</span>
+              <span style={{ color: "var(--yellow)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+                Not found
+              </span>
             )}
           </div>
         </motion.div>
 
         <motion.div className="stat-card" variants={staggerItem}>
           <div className="label">CLI Version</div>
-          <div className="value" style={{ fontSize: "18px" }}>
+          <div className="value" style={{ fontSize: "20px" }}>
             {status?.version || <span className="loading-spinner" />}
           </div>
           {status?.api_url && (
@@ -282,21 +328,21 @@ export function Home() {
           animate="animate"
           style={{ marginBottom: "24px" }}
         >
-          <motion.div className="stat-card" variants={staggerItem}>
+          <motion.div className="stat-card stat-accent" variants={staggerItem}>
             <div className="label">Total Jobs</div>
-            <div className="value">{jobCounts.total}</div>
+            <div className="value"><AnimatedCounter value={jobCounts.total} /></div>
           </motion.div>
-          <motion.div className="stat-card" variants={staggerItem}>
+          <motion.div className="stat-card stat-green" variants={staggerItem}>
             <div className="label">Completed</div>
-            <div className="value" style={{ color: "var(--green)" }}>{jobCounts.completed}</div>
+            <div className="value"><AnimatedCounter value={jobCounts.completed} color="var(--green)" /></div>
           </motion.div>
-          <motion.div className="stat-card" variants={staggerItem}>
+          <motion.div className="stat-card stat-yellow" variants={staggerItem}>
             <div className="label">Processing</div>
-            <div className="value" style={{ color: "var(--yellow)" }}>{jobCounts.processing}</div>
+            <div className="value"><AnimatedCounter value={jobCounts.processing} color="var(--yellow)" /></div>
           </motion.div>
-          <motion.div className="stat-card" variants={staggerItem}>
+          <motion.div className="stat-card stat-red" variants={staggerItem}>
             <div className="label">Failed</div>
-            <div className="value" style={{ color: "var(--red)" }}>{jobCounts.failed}</div>
+            <div className="value"><AnimatedCounter value={jobCounts.failed} color="var(--red)" /></div>
           </motion.div>
         </motion.div>
       )}
@@ -307,7 +353,7 @@ export function Home() {
           <h2 style={{ fontSize: "18px", fontWeight: 600 }}>Recent Jobs</h2>
         </div>
         {jobsLoading ? (
-          <div className="loading">Loading jobs...</div>
+          <SkeletonTable rows={3} cols={4} />
         ) : jobsError ? (
           <div style={{ padding: "32px 24px", textAlign: "center", color: "var(--text-dim)" }}>
             <p style={{ marginBottom: "8px" }}>Could not load jobs</p>
@@ -320,8 +366,14 @@ export function Home() {
             </p>
           </div>
         ) : !jobs || jobs.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--text-dim)" }}>
-            <p style={{ marginBottom: "12px" }}>No jobs yet</p>
+          <div className="empty-state">
+            <svg className="empty-state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" strokeDasharray="none" />
+              <path d="M9 21V9" strokeDasharray="none" />
+            </svg>
+            <div className="empty-state-title">No jobs yet</div>
+            <div className="empty-state-description">Submit your first data processing job to get started</div>
             {allHealthy && (
               <Link to="/submit" className="btn-primary" style={{ textDecoration: "none" }}>
                 Submit your first job
@@ -341,9 +393,13 @@ export function Home() {
               </thead>
               <tbody>
                 {jobs.map((job) => (
-                  <tr key={job.job_id} onClick={() => window.location.href = `/jobs/${job.job_id}`}>
-                    <td style={{ fontFamily: "monospace", fontSize: "13px" }}>
-                      {job.job_id.slice(0, 8)}...
+                  <tr
+                    key={job.job_id}
+                    className={`row-${job.status.toLowerCase()}`}
+                    onClick={() => window.location.href = `/jobs/${job.job_id}`}
+                  >
+                    <td style={{ fontFamily: "monospace", fontSize: "12px", whiteSpace: "nowrap" }}>
+                      {job.job_id}
                     </td>
                     <td>{job.plugin_name}</td>
                     <td><StatusBadge status={job.status} /></td>

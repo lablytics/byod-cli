@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { fadeInUp } from "../animations/variants";
+import { fadeInUp, drawPath, successContainer, successItem } from "../animations/variants";
 import { apiFetch } from "../hooks/useApi";
 import { useSSE } from "../hooks/useSSE";
 import { ProgressTracker } from "../components/ProgressTracker";
+import { SkeletonChecklist } from "../components/Skeleton";
 
 interface SetupStatus {
   authenticated: boolean;
@@ -59,18 +60,43 @@ export function SetupWizard() {
   if (sse.result) {
     const result = sse.result as Record<string, string>;
     return (
-      <div className="success-content">
-        <div className="success-icon">
+      <motion.div
+        className="success-content"
+        variants={successContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <motion.div className="success-icon confetti-container" variants={successItem}>
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            <path d="M9 12l2 2 4-4" />
+            <motion.path d="M9 12l2 2 4-4" variants={drawPath} initial="initial" animate="animate" />
           </svg>
-        </div>
-        <h2>Setup Complete!</h2>
-        <p style={{ color: "var(--text-dim)", marginBottom: "16px" }}>
+          {[
+            { color: "var(--green)", target: "translate(-30px, -30px) scale(1)" },
+            { color: "var(--accent)", target: "translate(30px, -25px) scale(1)" },
+            { color: "var(--yellow)", target: "translate(-25px, 30px) scale(1)" },
+            { color: "var(--blue)", target: "translate(35px, 20px) scale(1)" },
+            { color: "var(--green)", target: "translate(0px, -35px) scale(1)" },
+            { color: "var(--accent)", target: "translate(-35px, 5px) scale(1)" },
+          ].map((p, i) => (
+            <span
+              key={i}
+              className="confetti-particle"
+              style={{
+                background: p.color,
+                top: "50%",
+                left: "50%",
+                animationDelay: `${i * 0.08}s`,
+                "--confetti-target": p.target,
+              } as React.CSSProperties}
+            />
+          ))}
+        </motion.div>
+        <motion.h2 variants={successItem}>Setup Complete!</motion.h2>
+        <motion.p variants={successItem} style={{ color: "var(--text-dim)", marginBottom: "16px" }}>
           Your KMS key and IAM role have been configured with attestation enforcement.
-        </p>
-        <div className="review-card" style={{ textAlign: "left", maxWidth: "600px", margin: "0 auto" }}>
+        </motion.p>
+        <motion.div variants={successItem} className="review-card" style={{ textAlign: "left", maxWidth: "600px", margin: "0 auto" }}>
           <div className="review-section">
             <h4>KMS Key ARN</h4>
             <p style={{ fontFamily: "monospace", fontSize: "12px", wordBreak: "break-all" }}>{result.kms_key_arn}</p>
@@ -91,12 +117,12 @@ export function SetupWizard() {
               <li>Lablytics operators cannot access your data</li>
             </ul>
           </div>
-        </div>
-        <div className="success-actions">
+        </motion.div>
+        <motion.div className="success-actions" variants={successItem}>
           <Link to="/" className="btn-primary" style={{ textDecoration: "none" }}>Go to Home</Link>
           <Link to="/submit" className="btn-secondary" style={{ textDecoration: "none" }}>Submit a Job</Link>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
@@ -108,7 +134,7 @@ export function SetupWizard() {
       </div>
 
       {loading ? (
-        <div className="loading">Checking prerequisites...</div>
+        <SkeletonChecklist items={5} />
       ) : (
         <>
           {/* Tenant error banner */}

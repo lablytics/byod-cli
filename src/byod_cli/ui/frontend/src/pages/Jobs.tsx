@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "../animations/variants";
 import { apiFetch } from "../hooks/useApi";
 import { StatusBadge } from "../components/StatusBadge";
+import { SkeletonTable } from "../components/Skeleton";
 
 interface Job {
   job_id: string;
@@ -74,12 +75,31 @@ export function Jobs() {
       {error && <div className="error-message">{error}</div>}
 
       {loading ? (
-        <div className="loading">Loading jobs...</div>
+        <div className="card" style={{ padding: 0 }}>
+          <SkeletonTable rows={5} cols={5} />
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "48px" }}>
-          <p style={{ color: "var(--text-dim)" }}>
-            {filter ? `No ${filter} jobs found` : "No jobs yet"}
-          </p>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="empty-state">
+            <svg className="empty-state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" strokeDasharray="none" />
+              <path d="M9 21V9" strokeDasharray="none" />
+            </svg>
+            <div className="empty-state-title">
+              {filter ? `No ${filter} jobs` : "No jobs yet"}
+            </div>
+            <div className="empty-state-description">
+              {filter
+                ? "Try a different filter or check back later"
+                : "Submit your first data processing job to get started"}
+            </div>
+            {!filter && (
+              <Link to="/submit" className="btn-primary" style={{ textDecoration: "none" }}>
+                Submit a Job
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <motion.div
@@ -104,6 +124,7 @@ export function Jobs() {
                 {filtered.map((job) => (
                   <motion.tr
                     key={job.job_id}
+                    className={`row-${job.status.toLowerCase()}`}
                     variants={staggerItem}
                     onClick={() => navigate(`/jobs/${job.job_id}`)}
                     style={{ cursor: "pointer" }}
@@ -114,7 +135,7 @@ export function Jobs() {
                     <td>{job.plugin_name}</td>
                     <td><StatusBadge status={job.status} /></td>
                     <td style={{ color: "var(--text-dim)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {job.description || "—"}
+                      {job.description || "\u2014"}
                     </td>
                     <td style={{ color: "var(--text-dim)" }}>
                       {new Date(job.created_at).toLocaleString()}

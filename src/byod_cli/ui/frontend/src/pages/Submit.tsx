@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { slideInRight, slideInLeft } from "../animations/variants";
+import { slideInRight, slideInLeft, drawPath, successContainer, successItem } from "../animations/variants";
 import { apiFetch } from "../hooks/useApi";
 import { useSSE } from "../hooks/useSSE";
 import { FileDropZone } from "../components/FileDropZone";
 import { SecurityBanner } from "../components/SecurityBanner";
 import { ProgressTracker } from "../components/ProgressTracker";
+import { SkeletonChecklist } from "../components/Skeleton";
 
 interface Plugin {
   name: string;
@@ -97,31 +98,57 @@ export function Submit() {
   if (sse.result) {
     const result = sse.result as Record<string, string>;
     return (
-      <div className="success-content">
-        <div className="success-icon">
+      <motion.div
+        className="success-content"
+        variants={successContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <motion.div className="success-icon confetti-container" variants={successItem}>
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
-            <path d="M9 12l2 2 4-4" />
+            <motion.path d="M9 12l2 2 4-4" variants={drawPath} initial="initial" animate="animate" />
           </svg>
-        </div>
-        <h2>Job Submitted!</h2>
-        <div className="job-id">
+          {/* Confetti particles */}
+          {[
+            { color: "var(--green)", target: "translate(-30px, -30px) scale(1)" },
+            { color: "var(--accent)", target: "translate(30px, -25px) scale(1)" },
+            { color: "var(--yellow)", target: "translate(-25px, 30px) scale(1)" },
+            { color: "var(--blue)", target: "translate(35px, 20px) scale(1)" },
+            { color: "var(--green)", target: "translate(0px, -35px) scale(1)" },
+            { color: "var(--accent)", target: "translate(-35px, 5px) scale(1)" },
+          ].map((p, i) => (
+            <span
+              key={i}
+              className="confetti-particle"
+              style={{
+                background: p.color,
+                top: "50%",
+                left: "50%",
+                animationDelay: `${i * 0.08}s`,
+                "--confetti-target": p.target,
+              } as React.CSSProperties}
+            />
+          ))}
+        </motion.div>
+        <motion.h2 variants={successItem}>Job Submitted!</motion.h2>
+        <motion.div className="job-id" variants={successItem}>
           <code style={{ background: "var(--surface)", padding: "4px 12px", borderRadius: "6px", border: "1px solid var(--border)" }}>
             {result.job_id}
           </code>
-        </div>
-        <p style={{ color: "var(--text-dim)", marginBottom: "24px" }}>
+        </motion.div>
+        <motion.p variants={successItem} style={{ color: "var(--text-dim)", marginBottom: "24px" }}>
           Your data was encrypted locally and submitted for processing.
-        </p>
-        <div className="success-actions">
+        </motion.p>
+        <motion.div className="success-actions" variants={successItem}>
           <button className="btn-primary" onClick={() => navigate(`/jobs/${result.job_id}`)}>
             View Job
           </button>
           <button className="btn-secondary" onClick={() => { sse.reset(); setStep(0); setFiles([]); setSelectedPlugin(""); setDescription(""); }}>
             Submit Another
           </button>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
@@ -152,7 +179,7 @@ export function Submit() {
           <h1>Submit Job</h1>
           <p>Encrypt and submit data for secure processing</p>
         </div>
-        <div className="loading">Checking prerequisites...</div>
+        <SkeletonChecklist items={4} />
       </div>
     );
   }
