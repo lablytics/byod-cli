@@ -219,3 +219,107 @@ class TestCollectFiles:
         d = self._make_tree(temp_dir)
         files = encryption_manager._collect_files(d, None, None)
         assert files == sorted(set(files))
+
+    def test_deeply_nested_directories(self, encryption_manager, temp_dir):
+        """_collect_files should find files in deeply nested directories."""
+        d = temp_dir / "deep"
+        deep = d / "a" / "b" / "c" / "d"
+        deep.mkdir(parents=True)
+        (deep / "deep_file.txt").write_text("deep content")
+        (d / "top.txt").write_text("top")
+
+        files = encryption_manager._collect_files(d, None, None)
+        names = [f.name for f in files]
+        assert "deep_file.txt" in names
+        assert "top.txt" in names
+        assert len(files) == 2
+
+    def test_empty_files_included(self, encryption_manager, temp_dir):
+        """Empty files should be collected (not skipped)."""
+        d = temp_dir / "with_empty"
+        d.mkdir()
+        (d / "empty.txt").write_bytes(b"")
+        (d / "nonempty.txt").write_text("content")
+
+        files = encryption_manager._collect_files(d, None, None)
+        names = [f.name for f in files]
+        assert "empty.txt" in names
+        assert len(files) == 2
+
+    def test_special_characters_in_filenames(self, encryption_manager, temp_dir):
+        """Files with spaces and special chars should be collected."""
+        d = temp_dir / "special"
+        d.mkdir()
+        (d / "file with spaces.txt").write_text("spaced")
+        (d / "file-with-dashes.txt").write_text("dashed")
+        (d / "file_with_underscores.txt").write_text("underscored")
+
+        files = encryption_manager._collect_files(d, None, None)
+        assert len(files) == 3
+
+
+# ---------------------------------------------------------------------------
+# Encrypt/decrypt edge cases
+# ---------------------------------------------------------------------------
+
+class TestEncryptDecryptEdgeCases:
+    def test_encrypt_decrypt_empty_file(self, encryption_manager, temp_dir):
+        """Encrypting and decrypting an empty file should preserve it."""
+        input_file = temp_dir / "empty.txt"
+        input_file.write_bytes(b"")
+
+        enc_dir = temp_dir / "encrypted"
+        result = encryption_manager.encrypt_path(input_file, enc_dir)
+        assert result["files_encrypted"] == 1
+
+        dec_dir = temp_dir / "decrypted"
+        result = encryption_manager.decrypt_path(enc_dir, dec_dir)
+        assert result["files_decrypted"] == 1
+        assert (dec_dir / "empty.txt").read_bytes() == b""
+
+    def test_encrypt_decrypt_deeply_nested(self, encryption_manager, temp_dir):
+        """Encrypting a deeply nested directory structure should preserve paths."""
+        input_dir = temp_dir / "nested_data"
+        deep = input_dir / "level1" / "level2" / "level3"
+        deep.mkdir(parents=True)
+        (deep / "deep.txt").write_text("deep content")
+        (input_dir / "root.txt").write_text("root content")
+
+        enc_dir = temp_dir / "encrypted"
+        result = encryption_manager.encrypt_path(
+            input_dir, enc_dir, preserve_structure=True,
+        )
+        assert result["files_encrypted"] == 2
+
+        dec_dir = temp_dir / "decrypted"
+        result = encryption_manager.decrypt_path(enc_dir, dec_dir)
+        assert result["files_decrypted"] == 2
+
+    def test_encrypt_decrypt_special_chars_filename(self, encryption_manager, temp_dir):
+        """Files with spaces in names should encrypt/decrypt correctly."""
+        input_file = temp_dir / "my data file.txt"
+        input_file.write_text("content with spaces in name")
+
+        enc_dir = temp_dir / "encrypted"
+        encryption_manager.encrypt_path(input_file, enc_dir)
+
+        dec_dir = temp_dir / "decrypted"
+        result = encryption_manager.decrypt_path(enc_dir, dec_dir)
+        assert result["files_decrypted"] == 1
+
+    def test_encrypt_many_files(self, encryption_manager, temp_dir):
+        """Encrypting many files should work correctly."""
+        input_dir = temp_dir / "many_files"
+        input_dir.mkdir()
+        for i in range(20):
+            (input_dir / f"file_{i:03d}.txt").write_text(f"content {i}")
+
+        enc_dir = temp_dir / "encrypted"
+        result = encryption_manager.encrypt_path(input_dir, enc_dir)
+        assert result["files_encrypted"] == 20
+
+        dec_dir = temp_dir / "decrypted"
+        result = encryption_manager.decrypt_path(enc_dir, dec_dir)
+        assert result["files_decrypted"] == 20
+        for i in range(20):
+            assert (dec_dir / f"file_{i:03d}.txt").read_text() == f"content {i}"

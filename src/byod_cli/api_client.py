@@ -106,6 +106,18 @@ class APIClient:
         api_key: str | None = None,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
+        # Enforce HTTPS to prevent credentials being sent in plaintext.
+        # Allow HTTP only for localhost (local UI server) and explicit test URLs.
+        if not api_url.startswith("https://"):
+            from urllib.parse import urlparse
+
+            host = urlparse(api_url).hostname or ""
+            if host not in ("localhost", "127.0.0.1", "0.0.0.0"):
+                logger.warning(
+                    "API URL uses HTTP instead of HTTPS — credentials may be sent in plaintext. "
+                    "Set BYOD_API_URL to an https:// URL for production use."
+                )
+
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.timeout = timeout

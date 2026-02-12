@@ -8,6 +8,9 @@ Your data is encrypted on your machine, processed inside a cryptographically att
 
 ```bash
 pip install byod-cli
+
+# With the local web UI
+pip install 'byod-cli[ui]'
 ```
 
 **Requirements:** Python 3.9+ and AWS credentials (`aws configure` or environment variables).
@@ -51,6 +54,8 @@ byod get <job-id> -o ./output/            # Retrieve + decrypt in one step
 
 That's it. Your data was never visible to anyone outside the enclave.
 
+> **Prefer a GUI?** Run `byod ui` to do all of the above through a local web interface with drag-and-drop file submission and visual progress tracking.
+
 ---
 
 ## Commands
@@ -72,6 +77,7 @@ That's it. Your data was never visible to anyone outside the enclave.
 | `byod profile delete <name>` | Delete a profile |
 | `byod profile show` | Show current profile details |
 | `byod config show` | Show current configuration |
+| `byod ui` | Launch the local web UI for graphical submission and monitoring |
 | `byod completion <shell>` | Generate shell completions (bash/zsh/fish) |
 
 ## Plugins
@@ -85,6 +91,24 @@ That's it. Your data was never visible to anyone outside the enclave.
 byod plugins                # See all available plugins
 byod plugins --format json  # JSON output for scripting
 ```
+
+## Web UI
+
+Prefer a graphical interface? The CLI includes a local web UI with drag-and-drop file submission, visual job tracking, and one-click result retrieval.
+
+```bash
+byod ui                    # Opens http://localhost:8420
+byod ui --port 9000        # Custom port
+byod ui --no-browser       # Don't auto-open browser
+```
+
+The web UI runs entirely on your machine. All encryption happens locally — same security model as the CLI. Features include:
+
+- **Guided setup** — walks you through authentication, AWS configuration, and KMS key creation
+- **Drag-and-drop submission** — select a plugin, drop your files, and submit
+- **Live job tracking** — watch progress with real-time status updates
+- **One-click results** — download and decrypt results directly in the browser
+- **Profile management** — switch between profiles and view configuration
 
 ## Examples
 
@@ -122,6 +146,10 @@ byod --no-color list
 # Use API key via environment variable (useful for CI/CD)
 export BYOD_API_KEY=sk_live_xxxxx
 byod --quiet submit genomic-qc ./sample.fastq.gz --format json
+
+# Launch the web UI
+byod ui
+byod ui --port 9000 --no-browser
 
 # Shell completions
 eval "$(byod completion bash)"

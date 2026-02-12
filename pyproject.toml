@@ -49,6 +49,9 @@ dependencies = [
     "boto3>=1.28.0",
     "tqdm>=4.66.0",
     "requests>=2.31.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +63,7 @@ dev = [
     "ruff>=0.1.0",
     "moto>=5.0.0",
     "responses>=0.24.0",
+    "httpx>=0.25.0",
 ]
 
 [project.scripts]
@@ -78,6 +82,13 @@ include = [
     "LICENSE",
     "README.md",
 ]
+exclude = [
+    "src/byod_cli/ui/frontend/node_modules",
+    "src/byod_cli/ui/frontend/src",
+    "src/byod_cli/ui/frontend/*.json",
+    "src/byod_cli/ui/frontend/*.ts",
+    "src/byod_cli/ui/frontend/*.html",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/byod_cli"]
@@ -90,8 +101,10 @@ target-version = "py39"
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
 ignore = [
     "E501",    # Line too long (handled by formatter)
+    "N803",    # Non-lowercase argument name (@patch mock injection patterns)
     "N806",    # Non-lowercase variable in function (MockClient patterns in tests)
     "B008",    # Function call in default arg (standard Click/FastAPI patterns)
+    "B017",    # Blind exception in pytest.raises (used for crypto error tests)
     "SIM105",  # Use contextlib.suppress (stylistic preference)
     "SIM117",  # Multiple with statements (readability preference)
 ]
