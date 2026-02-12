@@ -9,6 +9,7 @@ import os
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from byod_cli.s3_client import S3Client
@@ -281,3 +282,111 @@ class TestEncryptDecryptHelper:
         encrypted = S3Client._encrypt(plaintext, key)
         decrypted = S3Client._decrypt(encrypted, key)
         assert decrypted == plaintext
+
+
+# ---------------------------------------------------------------------------
+# Error scenarios
+# ---------------------------------------------------------------------------
+
+class TestErrorScenarios:
+    def test_submit_job_kms_access_denied(self, aws_env):
+        """submit_job should raise when KMS denies key generation."""
+        with mock_aws():
+            s3 = boto3.client("s3", region_name=REGION)
+            s3.create_bucket(Bucket=DATA_BUCKET)
+
+            # Use a fake key ID that will fail
+            client = S3Client(
+                region=REGION,
+                data_bucket=DATA_BUCKET,
+                results_bucket=RESULTS_BUCKET,
+                kms_key_id="arn:aws:kms:us-east-1:000000000000:key/fake-key-id",
+            )
+
+            import tempfile
+            from pathlib import Path
+
+            with tempfile.TemporaryDirectory() as tmp:
+                sample = Path(tmp) / "input.txt"
+                sample.write_text("data")
+
+                with pytest.raises(ClientError):
+                    client.submit_job(sample, "demo-count")
+
+    def test_download_results_no_results_bucket(self, aws_env):
+        """download_results should raise when bucket doesn't exist."""
+        with mock_aws():
+            s3_boto = boto3.client("s3", region_name=REGION)
+            s3_boto.create_bucket(Bucket=DATA_BUCKET)
+            kms = boto3.client("kms", region_name=REGION)
+            key_resp = kms.create_key()
+            key_id = key_resp["KeyMetadata"]["KeyId"]
+
+            client = S3Client(
+                region=REGION,
+                data_bucket=DATA_BUCKET,
+                results_bucket="nonexistent-bucket",
+                kms_key_id=key_id,
+            )
+
+            import tempfile
+            from pathlib import Path
+
+            with tempfile.TemporaryDirectory() as tmp:
+                with pytest.raises((ClientError, FileNotFoundError)):
+                    client.download_results("some-job", Path(tmp) / "out")
+
+    def test_get_job_status_no_manifest(self, s3_client):
+        """get_job_status for a job with no manifest should return not_found."""
+        status = s3_client.get_job_status("completely-nonexistent-job-xyz")
+        assert status["status"] == "not_found"
+        assert status["job_id"] == "completely-nonexistent-job-xyz"
+
+    def test_submit_then_list_ordering(self, s3_client, temp_dir):
+        """Jobs should be listable after submission."""
+        sample = temp_dir / "input.txt"
+        sample.write_text("data")
+
+        ids = []
+        for i in range(3):
+            job_id = s3_client.submit_job(sample, f"plugin-{i}")
+            ids.append(job_id)
+
+        jobs = s3_client.list_jobs(limit=100)
+        listed_ids = {j["job_id"] for j in jobs}
+        for jid in ids:
+            assert jid in listed_ids
+
+    def test_encrypt_decrypt_empty_data(self):
+        """Encrypt/decrypt with empty data should work."""
+        key = os.urandom(32)
+        encrypted = S3Client._encrypt(b"", key)
+        decrypted = S3Client._decrypt(encrypted, key)
+        assert decrypted == b""
+
+    def test_encrypt_decrypt_large_data(self):
+        """Encrypt/decrypt with larger data should work."""
+        key = os.urandom(32)
+        plaintext = os.urandom(1024 * 1024)  # 1 MB
+        encrypted = S3Client._encrypt(plaintext, key)
+        decrypted = S3Client._decrypt(encrypted, key)
+        assert decrypted == plaintext
+
+    def test_decrypt_with_wrong_key_raises(self):
+        """Decrypt with wrong key should raise."""
+        key1 = os.urandom(32)
+        key2 = os.urandom(32)
+        encrypted = S3Client._encrypt(b"secret", key1)
+
+        with pytest.raises(Exception):
+            S3Client._decrypt(encrypted, key2)
+
+    def test_decrypt_with_corrupted_data_raises(self):
+        """Decrypt with tampered ciphertext should raise."""
+        key = os.urandom(32)
+        encrypted = bytearray(S3Client._encrypt(b"secret", key))
+        # Corrupt a byte in the ciphertext (after nonce)
+        encrypted[15] ^= 0xFF
+
+        with pytest.raises(Exception):
+            S3Client._decrypt(bytes(encrypted), key)
