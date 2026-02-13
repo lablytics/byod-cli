@@ -50,6 +50,32 @@ async def list_jobs(
         raise HTTPException(status_code=502, detail="Failed to fetch jobs. Check your API key and network.") from e
 
 
+@router.get("/jobs/{job_id}/logs")
+async def get_job_logs(
+    request: Request,
+    job_id: str,
+    limit: int = Query(1000, ge=1, le=5000),
+    level: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    since: Optional[str] = Query(None),
+):
+    """Proxy job logs from the dashboard API."""
+    client = _get_api_client(request)
+    try:
+        data = await asyncio.to_thread(
+            client.get_job_logs,
+            job_id,
+            limit=limit,
+            level=level,
+            source=source,
+            since=since,
+        )
+        return data
+    except Exception as e:
+        logger.exception("Failed to get logs for job %s", job_id)
+        raise HTTPException(status_code=502, detail="Failed to fetch job logs.") from e
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(request: Request, job_id: str):
     """Get a single job's status and details."""
