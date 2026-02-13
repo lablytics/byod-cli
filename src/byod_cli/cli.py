@@ -812,6 +812,37 @@ def submit(
         with open(config_path) as f:
             plugin_config = json.load(f)
 
+    # Validate plugin name and file types before encryption
+    with console.status("[bold green]Validating plugin and file types..."):
+        try:
+            available_plugins = client.list_plugins()
+        except Exception:
+            available_plugins = []
+
+    if available_plugins:
+        plugin_meta = next((p for p in available_plugins if p["name"] == plugin), None)
+        if plugin_meta is None:
+            plugin_names = ", ".join(p["name"] for p in available_plugins)
+            console.print(format_error(
+                f"Unknown plugin '{plugin}'. Available plugins: {plugin_names}"
+            ))
+            sys.exit(EXIT_ERROR)
+
+        # Validate file types against plugin input spec
+        from byod_cli.validation import validate_files_for_plugin
+
+        if input_path.is_dir():
+            filenames = [f.name for f in input_path.iterdir() if f.is_file()]
+        else:
+            filenames = [input_path.name]
+
+        validation_errors = validate_files_for_plugin(filenames, plugin_meta.get("inputs", []))
+        if validation_errors:
+            console.print(format_error("File type validation failed:"))
+            for err in validation_errors:
+                console.print(f"  [red]{err}[/red]")
+            sys.exit(EXIT_ERROR)
+
     try:
         # Get tenant config for KMS key
         with console.status("[bold green]Getting platform configuration..."):

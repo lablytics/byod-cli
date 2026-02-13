@@ -66,6 +66,31 @@ async def submit_job(
             )
         file_contents.append((f.filename or "upload", content))
 
+    # Validate file types against plugin input spec
+    from byod_cli.validation import validate_files_for_plugin
+
+    try:
+        available_plugins = await asyncio.to_thread(client.list_plugins)
+    except Exception:
+        available_plugins = []
+
+    if available_plugins:
+        plugin_meta = next((p for p in available_plugins if p["name"] == plugin), None)
+        if plugin_meta is None:
+            plugin_names = ", ".join(p["name"] for p in available_plugins)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown plugin '{plugin}'. Available: {plugin_names}",
+            )
+
+        filenames = [name for name, _ in file_contents]
+        validation_errors = validate_files_for_plugin(filenames, plugin_meta.get("inputs", []))
+        if validation_errors:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file types: {'; '.join(validation_errors)}",
+            )
+
     async def _stream():
         tmp_dir = None
         try:
