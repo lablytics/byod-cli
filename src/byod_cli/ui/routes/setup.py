@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from byod_cli.ui.routes import sse_event
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["setup"])
@@ -164,7 +166,7 @@ async def run_setup(request: Request, body: SetupRequest):
 
     async def _stream():
         try:
-            yield _sse("progress", {"stage": "checking", "percent": 5, "message": "Checking prerequisites..."})
+            yield sse_event("progress", {"stage": "checking", "percent": 5, "message": "Checking prerequisites..."})
 
             # Verify auth and get tenant info
             from byod_cli.api_client import APIClient
@@ -175,13 +177,13 @@ async def run_setup(request: Request, body: SetupRequest):
             auth_info = await asyncio.to_thread(client.verify_auth)
             tenant_id = auth_info.get("tenant_id")
             if not tenant_id:
-                yield _sse("error", {
+                yield sse_event("error", {
                     "message": "Your account is not associated with a tenant. "
                     "Please complete onboarding on the dashboard first.",
                 })
                 return
 
-            yield _sse("progress", {"stage": "aws", "percent": 10, "message": "Verifying AWS credentials..."})
+            yield sse_event("progress", {"stage": "aws", "percent": 10, "message": "Verifying AWS credentials..."})
 
             import boto3
             from botocore.exceptions import ClientError
@@ -190,7 +192,7 @@ async def run_setup(request: Request, body: SetupRequest):
             identity = await asyncio.to_thread(sts.get_caller_identity)
             aws_account_id = identity["Account"]
 
-            yield _sse("progress", {"stage": "enclave", "percent": 18, "message": "Getting enclave information..."})
+            yield sse_event("progress", {"stage": "enclave", "percent": 18, "message": "Getting enclave information..."})
 
             enclave_info = await asyncio.to_thread(client.get_enclave_info)
             # Support multi-PCR0: prefer pcr0_values array, fall back to single pcr0
@@ -205,7 +207,7 @@ async def run_setup(request: Request, body: SetupRequest):
 
             # Force-new: tear down existing resources first
             if body.force_new:
-                yield _sse("progress", {"stage": "cleanup", "percent": 22, "message": "Deleting existing resources..."})
+                yield sse_event("progress", {"stage": "cleanup", "percent": 22, "message": "Deleting existing resources..."})
 
                 # Delete IAM role (must remove policies first)
                 try:
@@ -231,7 +233,7 @@ async def run_setup(request: Request, body: SetupRequest):
                 except ClientError as e:
                     if e.response["Error"]["Code"] != "NoSuchEntity":
                         logger.warning("Could not delete IAM role during cleanup: %s", e)
-                        yield _sse("progress", {
+                        yield sse_event("progress", {
                             "stage": "cleanup",
                             "percent": 24,
                             "message": "Warning: could not delete existing IAM role",
@@ -250,16 +252,16 @@ async def run_setup(request: Request, body: SetupRequest):
                 except ClientError as e:
                     if e.response["Error"]["Code"] != "NotFoundException":
                         logger.warning("Could not delete KMS key during cleanup: %s", e)
-                        yield _sse("progress", {
+                        yield sse_event("progress", {
                             "stage": "cleanup",
                             "percent": 26,
                             "message": "Warning: could not delete existing KMS key",
                         })
 
-                yield _sse("progress", {"stage": "cleanup_done", "percent": 28, "message": "Existing resources cleaned up"})
+                yield sse_event("progress", {"stage": "cleanup_done", "percent": 28, "message": "Existing resources cleaned up"})
 
             # Create cross-account IAM role
-            yield _sse("progress", {"stage": "iam_role", "percent": 35, "message": "Creating cross-account IAM role..."})
+            yield sse_event("progress", {"stage": "iam_role", "percent": 35, "message": "Creating cross-account IAM role..."})
 
             trust_policy = {
                 "Version": "2012-10-17",
@@ -285,7 +287,7 @@ async def run_setup(request: Request, body: SetupRequest):
                 role_arn = role_resp["Role"]["Arn"]
 
                 # Wait for IAM role to propagate (eventual consistency)
-                yield _sse("progress", {"stage": "iam_propagation", "percent": 42, "message": "Waiting for IAM role to propagate..."})
+                yield sse_event("progress", {"stage": "iam_propagation", "percent": 42, "message": "Waiting for IAM role to propagate..."})
                 await asyncio.sleep(10)
             except ClientError as e:
                 if e.response["Error"]["Code"] == "EntityAlreadyExists":
@@ -298,11 +300,11 @@ async def run_setup(request: Request, body: SetupRequest):
                     )
                 else:
                     logger.exception("Failed to create IAM role")
-                    yield _sse("error", {"message": "Failed to create IAM role. Check your AWS permissions."})
+                    yield sse_event("error", {"message": "Failed to create IAM role. Check your AWS permissions."})
                     return
 
             # Create KMS key with attestation policy (4 statements, matching CLI)
-            yield _sse("progress", {"stage": "kms_key", "percent": 50, "message": "Creating KMS key with attestation policy..."})
+            yield sse_event("progress", {"stage": "kms_key", "percent": 50, "message": "Creating KMS key with attestation policy..."})
 
             key_policy = {
                 "Version": "2012-10-17",
@@ -378,11 +380,11 @@ async def run_setup(request: Request, body: SetupRequest):
                     pass  # Alias might already exist
             except ClientError:
                 logger.exception("KMS key creation failed")
-                yield _sse("error", {"message": "Failed to create KMS key. Check your AWS permissions."})
+                yield sse_event("error", {"message": "Failed to create KMS key. Check your AWS permissions."})
                 return
 
             # Attach KMS permissions to the IAM role
-            yield _sse("progress", {"stage": "iam_policy", "percent": 68, "message": "Attaching KMS permissions to role..."})
+            yield sse_event("progress", {"stage": "iam_policy", "percent": 68, "message": "Attaching KMS permissions to role..."})
 
             role_policy = {
                 "Version": "2012-10-17",
@@ -401,11 +403,11 @@ async def run_setup(request: Request, body: SetupRequest):
                 )
             except ClientError:
                 logger.exception("Failed to attach KMS policy to IAM role")
-                yield _sse("error", {"message": "Failed to attach KMS permissions to role. Check your AWS permissions."})
+                yield sse_event("error", {"message": "Failed to attach KMS permissions to role. Check your AWS permissions."})
                 return
 
             # Register with Lablytics
-            yield _sse("progress", {"stage": "registering", "percent": 82, "message": "Registering with Lablytics..."})
+            yield sse_event("progress", {"stage": "registering", "percent": 82, "message": "Registering with Lablytics..."})
 
             try:
                 await asyncio.to_thread(
@@ -417,7 +419,7 @@ async def run_setup(request: Request, body: SetupRequest):
                 )
             except Exception:
                 logger.exception("Registration with Lablytics failed")
-                yield _sse("error", {
+                yield sse_event("error", {
                     "message": "Registration failed. "
                     "AWS resources were created but not registered with Lablytics. "
                     "Check the CLI logs for details.",
@@ -425,7 +427,7 @@ async def run_setup(request: Request, body: SetupRequest):
                 return
 
             # Save to local config
-            yield _sse("progress", {"stage": "saving", "percent": 93, "message": "Saving configuration..."})
+            yield sse_event("progress", {"stage": "saving", "percent": 93, "message": "Saving configuration..."})
 
             profile_name = config.get_active_profile_name()
             if profile_name:
@@ -434,8 +436,8 @@ async def run_setup(request: Request, body: SetupRequest):
                 config.update_profile_setting(profile_name, "aws_account_id", aws_account_id)
                 config.update_profile_setting(profile_name, "region", body.region)
 
-            yield _sse("progress", {"stage": "done", "percent": 100, "message": "Setup complete!"})
-            yield _sse("complete", {
+            yield sse_event("progress", {"stage": "done", "percent": 100, "message": "Setup complete!"})
+            yield sse_event("complete", {
                 "kms_key_arn": kms_key_arn,
                 "role_arn": role_arn,
                 "aws_account_id": aws_account_id,
@@ -443,10 +445,8 @@ async def run_setup(request: Request, body: SetupRequest):
             })
         except Exception:
             logger.exception("Setup failed unexpectedly")
-            yield _sse("error", {"message": "An unexpected error occurred during setup. Check the CLI logs for details."})
+            yield sse_event("error", {"message": "An unexpected error occurred during setup. Check the CLI logs for details."})
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"

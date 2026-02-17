@@ -10,6 +10,8 @@ import tarfile
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
+from byod_cli.ui.routes import sse_event
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["submit"])
@@ -74,7 +76,7 @@ async def submit_job(
     except Exception:
         available_plugins = []
 
-    if available_plugins:
+    if available_plugins and plugin != "composed":
         plugin_meta = next((p for p in available_plugins if p["name"] == plugin), None)
         if plugin_meta is None:
             plugin_names = ", ".join(p["name"] for p in available_plugins)
@@ -94,14 +96,14 @@ async def submit_job(
     async def _stream():
         tmp_dir = None
         try:
-            yield _sse("progress", {"stage": "receiving", "percent": 5, "message": f"Received {len(file_contents)} file(s)..."})
+            yield sse_event("progress", {"stage": "receiving", "percent": 5, "message": f"Received {len(file_contents)} file(s)..."})
 
             # Build the plaintext payload — tar.gz if multiple files, raw if single
             if len(file_contents) == 1:
                 filename, plaintext = file_contents[0]
                 upload_filename = f"{filename}.enc"
             else:
-                yield _sse("progress", {"stage": "packaging", "percent": 10, "message": f"Packaging {len(file_contents)} files..."})
+                yield sse_event("progress", {"stage": "packaging", "percent": 10, "message": f"Packaging {len(file_contents)} files..."})
                 buf = io.BytesIO()
                 with tarfile.open(fileobj=buf, mode="w:gz") as tar:
                     for fname, content in file_contents:
@@ -112,7 +114,7 @@ async def submit_job(
                 upload_filename = "input.tar.gz.enc"
 
             file_size = len(plaintext)
-            yield _sse("progress", {"stage": "encrypting", "percent": 15, "message": f"Encrypting ({_format_bytes(file_size)})..."})
+            yield sse_event("progress", {"stage": "encrypting", "percent": 15, "message": f"Encrypting ({_format_bytes(file_size)})..."})
 
             # Get KMS key from profile config
             profile = app_config.get_active_profile_config() if app_config.get_active_profile_name() else {}
@@ -120,7 +122,7 @@ async def submit_job(
             kms_key_arn = settings.get("kms_key_arn")
 
             if not kms_key_arn:
-                yield _sse("error", {"message": "No KMS key configured. Run 'byod setup' first."})
+                yield sse_event("error", {"message": "No KMS key configured. Run 'byod setup' first."})
                 return
 
             import boto3
@@ -136,7 +138,7 @@ async def submit_job(
             plaintext_dek = dek_response["Plaintext"]
             wrapped_dek = dek_response["CiphertextBlob"]
 
-            yield _sse("progress", {"stage": "encrypting", "percent": 30, "message": "Encrypting data with AES-256-GCM..."})
+            yield sse_event("progress", {"stage": "encrypting", "percent": 30, "message": "Encrypting data with AES-256-GCM..."})
 
             # Encrypt with AES-256-GCM
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -146,7 +148,7 @@ async def submit_job(
             ciphertext = await asyncio.to_thread(aesgcm.encrypt, nonce, plaintext, None)
             encrypted_data = nonce + ciphertext
 
-            yield _sse("progress", {"stage": "uploading_data", "percent": 45, "message": "Uploading encrypted data..."})
+            yield sse_event("progress", {"stage": "uploading_data", "percent": 45, "message": "Uploading encrypted data..."})
 
             # Get presigned URL and upload encrypted data
             presigned = await asyncio.to_thread(
@@ -166,10 +168,10 @@ async def submit_job(
                 files={"file": ("encrypted", encrypted_data)},
             )
             if upload_resp.status_code not in (200, 201, 204):
-                yield _sse("error", {"message": f"Upload failed: HTTP {upload_resp.status_code}"})
+                yield sse_event("error", {"message": f"Upload failed: HTTP {upload_resp.status_code}"})
                 return
 
-            yield _sse("progress", {"stage": "uploading_key", "percent": 65, "message": "Uploading wrapped key..."})
+            yield sse_event("progress", {"stage": "uploading_key", "percent": 65, "message": "Uploading wrapped key..."})
 
             # Upload wrapped DEK
             key_presigned = await asyncio.to_thread(
@@ -185,10 +187,10 @@ async def submit_job(
                 files={"file": ("wrapped_key", wrapped_dek)},
             )
             if key_resp.status_code not in (200, 201, 204):
-                yield _sse("error", {"message": f"Key upload failed: HTTP {key_resp.status_code}"})
+                yield sse_event("error", {"message": f"Key upload failed: HTTP {key_resp.status_code}"})
                 return
 
-            yield _sse("progress", {"stage": "submitting", "percent": 85, "message": "Creating job..."})
+            yield sse_event("progress", {"stage": "submitting", "percent": 85, "message": "Creating job..."})
 
             # Submit the job
             submission = await asyncio.to_thread(
@@ -200,14 +202,14 @@ async def submit_job(
                 config=plugin_config,
             )
 
-            yield _sse("progress", {"stage": "done", "percent": 100, "message": "Job submitted!"})
-            yield _sse("complete", {
+            yield sse_event("progress", {"stage": "done", "percent": 100, "message": "Job submitted!"})
+            yield sse_event("complete", {
                 "job_id": submission.job_id,
                 "status": submission.status,
             })
         except Exception as e:
             logger.exception("Job submission failed")
-            yield _sse("error", {"message": _sanitize_error(e)})
+            yield sse_event("error", {"message": _sanitize_error(e)})
         finally:
             # Clean up temp files
             if tmp_dir:
@@ -218,8 +220,6 @@ async def submit_job(
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 def _format_bytes(size: int) -> str:

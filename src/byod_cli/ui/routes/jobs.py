@@ -14,6 +14,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+from byod_cli.ui.routes import sse_event
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["jobs"])
@@ -102,41 +104,41 @@ async def get_results(request: Request, job_id: str):
 
     async def _stream():
         try:
-            yield _sse("progress", {"stage": "checking", "percent": 5, "message": "Checking job status..."})
+            yield sse_event("progress", {"stage": "checking", "percent": 5, "message": "Checking job status..."})
 
             job = await asyncio.to_thread(client.get_job_status, job_id)
             job_status = job.get("status", "")
             if job_status != "completed":
-                yield _sse("error", {"message": f"Job is not completed (status: {job_status})"})
+                yield sse_event("error", {"message": f"Job is not completed (status: {job_status})"})
                 return
 
             output_dir = RESULTS_BASE / job_id
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Step 1: Download encrypted results
-            yield _sse("progress", {"stage": "downloading", "percent": 15, "message": "Downloading encrypted results..."})
+            yield sse_event("progress", {"stage": "downloading", "percent": 15, "message": "Downloading encrypted results..."})
 
             try:
                 output_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output.enc")
                 await asyncio.to_thread(client.download_file, output_presigned, output_dir / "output.enc")
             except Exception:
                 logger.exception("Failed to download results for job %s", job_id)
-                yield _sse("error", {"message": "Failed to download results. Check the CLI logs for details."})
+                yield sse_event("error", {"message": "Failed to download results. Check the CLI logs for details."})
                 return
 
             # Step 2: Download wrapped key
-            yield _sse("progress", {"stage": "downloading", "percent": 35, "message": "Downloading wrapped key..."})
+            yield sse_event("progress", {"stage": "downloading", "percent": 35, "message": "Downloading wrapped key..."})
 
             try:
                 key_presigned = await asyncio.to_thread(client.get_download_url, job_id, "output_key.bin")
                 await asyncio.to_thread(client.download_file, key_presigned, output_dir / "output_key.bin")
             except Exception:
                 logger.exception("Failed to download wrapped key for job %s", job_id)
-                yield _sse("error", {"message": "Failed to download wrapped key. Check the CLI logs for details."})
+                yield sse_event("error", {"message": "Failed to download wrapped key. Check the CLI logs for details."})
                 return
 
             # Step 3: Get tenant config for KMS region
-            yield _sse("progress", {"stage": "unwrapping", "percent": 50, "message": "Getting tenant configuration..."})
+            yield sse_event("progress", {"stage": "unwrapping", "percent": 50, "message": "Getting tenant configuration..."})
 
             try:
                 tenant_config = await asyncio.to_thread(client.get_tenant_config)
@@ -144,11 +146,11 @@ async def get_results(request: Request, job_id: str):
                 kms_region = tenant_config.region
             except Exception:
                 logger.exception("Failed to get tenant config for job %s", job_id)
-                yield _sse("error", {"message": "Failed to get tenant configuration. Check your API key and network."})
+                yield sse_event("error", {"message": "Failed to get tenant configuration. Check your API key and network."})
                 return
 
             # Step 4: Unwrap key via KMS
-            yield _sse("progress", {"stage": "unwrapping", "percent": 60, "message": "Unwrapping key via KMS..."})
+            yield sse_event("progress", {"stage": "unwrapping", "percent": 60, "message": "Unwrapping key via KMS..."})
 
             try:
                 import boto3
@@ -165,11 +167,11 @@ async def get_results(request: Request, job_id: str):
                 result_key = decrypt_response["Plaintext"]
             except Exception:
                 logger.exception("KMS key unwrap failed for job %s", job_id)
-                yield _sse("error", {"message": "KMS key unwrap failed. Check your AWS credentials and KMS key permissions."})
+                yield sse_event("error", {"message": "KMS key unwrap failed. Check your AWS credentials and KMS key permissions."})
                 return
 
             # Step 5: AES-256-GCM decrypt
-            yield _sse("progress", {"stage": "decrypting", "percent": 75, "message": "Decrypting results..."})
+            yield sse_event("progress", {"stage": "decrypting", "percent": 75, "message": "Decrypting results..."})
 
             try:
                 with open(output_dir / "output.enc", "rb") as f:
@@ -181,11 +183,11 @@ async def get_results(request: Request, job_id: str):
                 plaintext = aesgcm.decrypt(nonce, ciphertext, None)
             except Exception:
                 logger.exception("Decryption failed for job %s", job_id)
-                yield _sse("error", {"message": "Decryption failed. The data may be corrupted or the key may not match."})
+                yield sse_event("error", {"message": "Decryption failed. The data may be corrupted or the key may not match."})
                 return
 
             # Step 6: Extract results
-            yield _sse("progress", {"stage": "extracting", "percent": 88, "message": "Extracting results..."})
+            yield sse_event("progress", {"stage": "extracting", "percent": 88, "message": "Extracting results..."})
 
             decrypted_dir = output_dir / "decrypted"
             decrypted_dir.mkdir(parents=True, exist_ok=True)
@@ -216,14 +218,14 @@ async def get_results(request: Request, job_id: str):
             (output_dir / "output.enc").unlink(missing_ok=True)
             (output_dir / "output_key.bin").unlink(missing_ok=True)
 
-            yield _sse("progress", {"stage": "complete", "percent": 100, "message": "Results decrypted"})
-            yield _sse("complete", {
+            yield sse_event("progress", {"stage": "complete", "percent": 100, "message": "Results decrypted"})
+            yield sse_event("complete", {
                 "output_dir": str(decrypted_dir),
                 "files": extracted_files,
             })
         except Exception:
             logger.exception("Unexpected error retrieving results for job %s", job_id)
-            yield _sse("error", {"message": "An unexpected error occurred. Check the CLI logs for details."})
+            yield sse_event("error", {"message": "An unexpected error occurred. Check the CLI logs for details."})
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
@@ -291,6 +293,3 @@ async def get_result_file(
     )
 
 
-def _sse(event: str, data: dict) -> str:
-    """Format a Server-Sent Event."""
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
