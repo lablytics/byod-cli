@@ -107,15 +107,15 @@ class APIClient:
         timeout: int = DEFAULT_TIMEOUT,
     ) -> None:
         # Enforce HTTPS to prevent credentials being sent in plaintext.
-        # Allow HTTP only for localhost (local UI server) and explicit test URLs.
+        # Allow HTTP only for localhost (local UI server).
         if not api_url.startswith("https://"):
             from urllib.parse import urlparse
 
             host = urlparse(api_url).hostname or ""
             if host not in ("localhost", "127.0.0.1", "0.0.0.0"):
-                logger.warning(
-                    "API URL uses HTTP instead of HTTPS — credentials may be sent in plaintext. "
-                    "Set BYOD_API_URL to an https:// URL for production use."
+                raise ValueError(
+                    f"API URL must use HTTPS for non-localhost hosts. Got: {api_url}\n"
+                    "Use 'byod auth login' to reconfigure with an https:// URL."
                 )
 
         self.api_url = api_url.rstrip("/")
@@ -292,6 +292,24 @@ class APIClient:
         """List available pipeline plugins."""
         data = self._request("GET", "/api/v1/plugins")
         return data.get("plugins", [])
+
+    def get_job_logs(
+        self,
+        job_id: str,
+        limit: int = 1000,
+        level: str | None = None,
+        source: str | None = None,
+        since: str | None = None,
+    ) -> dict[str, Any]:
+        """Get logs for a specific job."""
+        params: dict[str, Any] = {"limit": limit}
+        if level:
+            params["level"] = level
+        if source:
+            params["source"] = source
+        if since:
+            params["since"] = since
+        return self._request("GET", f"/api/v1/jobs/{job_id}/logs", params=params)
 
     def upload_file(self, presigned: PresignedUpload, file_path: Path) -> None:
         """Upload a file using a presigned POST URL."""

@@ -54,8 +54,8 @@ class TestAuthLogin:
             customer_kms_key_arn=None,
         )
 
-        with patch("byod_cli.cli.APIClient") as MockClient, \
-             patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.commands.auth.APIClient") as MockClient, \
+             patch("byod_cli.config.ConfigManager") as MockConfig:
             instance = MockClient.return_value
             instance.verify_auth.return_value = mock_verify
             instance.get_tenant_config.return_value = mock_tenant
@@ -75,8 +75,8 @@ class TestAuthLogin:
     def test_bad_key(self, runner, tmp_path):
         from byod_cli.api_client import AuthenticationError
 
-        with patch("byod_cli.cli.APIClient") as MockClient, \
-             patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.commands.auth.APIClient") as MockClient, \
+             patch("byod_cli.config.ConfigManager") as MockConfig:
             instance = MockClient.return_value
             instance.verify_auth.side_effect = AuthenticationError("Invalid key", 401)
 
@@ -91,7 +91,7 @@ class TestAuthLogin:
 
 class TestAuthLogout:
     def test_success(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             result = runner.invoke(cli, ["auth", "logout"], catch_exceptions=False)
             assert result.exit_code == 0
@@ -101,7 +101,7 @@ class TestAuthLogout:
 
 class TestAuthStatus:
     def test_not_authenticated(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = False
 
@@ -116,8 +116,8 @@ class TestAuthStatus:
             region="us-east-1",
         )
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = True
             config_instance.get_api_key.return_value = "sk_live_test"
@@ -138,8 +138,8 @@ class TestAuthStatus:
 
 class TestListCommand:
     def test_no_jobs(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -157,8 +157,8 @@ class TestListCommand:
              "created_at": "2026-01-01T00:00:00Z", "description": "test"},
         ]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -173,8 +173,8 @@ class TestListCommand:
     def test_json_format(self, runner):
         jobs = [{"job_id": "j1", "status": "pending"}]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -199,8 +199,8 @@ class TestStatusCommand:
             "plugin_name": "demo-count", "created_at": "2026-01-01",
         }
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -215,8 +215,8 @@ class TestStatusCommand:
     def test_json_output(self, runner):
         status_info = {"job_id": "j1", "status": "pending"}
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -236,8 +236,8 @@ class TestStatusCommand:
 
 class TestPluginsCommand:
     def test_empty(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -255,8 +255,8 @@ class TestPluginsCommand:
             {"name": "genomic-qc", "description": "QC pipeline", "version": "2.0"},
         ]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -276,7 +276,7 @@ class TestPluginsCommand:
 
 class TestConfigShow:
     def test_displays_config(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.config_file = Path("/home/test/.byod/config.yaml")
             config_instance.get_api_url.return_value = "https://api.lablytics.io"

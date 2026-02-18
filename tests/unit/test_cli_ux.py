@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from byod_cli.cli import EXIT_AUTH, EXIT_ERROR, EXIT_NETWORK, EXIT_OK, cli
+from byod_cli.cli import cli
+from byod_cli.commands._helpers import EXIT_AUTH, EXIT_ERROR, EXIT_NETWORK, EXIT_OK
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def runner():
 class TestQuietFlag:
     def test_quiet_suppresses_output(self, runner):
         """--quiet should suppress rich output."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = False
 
@@ -36,7 +37,7 @@ class TestQuietFlag:
 
     def test_no_color_flag(self, runner):
         """--no-color should disable colored output."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = False
 
@@ -47,7 +48,7 @@ class TestQuietFlag:
 class TestNoColorEnvVar:
     def test_no_color_env(self, runner):
         """NO_COLOR env var should disable colors."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = False
 
@@ -65,7 +66,7 @@ class TestNoColorEnvVar:
 
 class TestAuthStatusJson:
     def test_not_authenticated_json(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = False
 
@@ -84,8 +85,8 @@ class TestAuthStatusJson:
             region="us-east-1",
         )
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.is_authenticated.return_value = True
             config_instance.get_api_key.return_value = "sk_live_test"
@@ -117,8 +118,8 @@ class TestPluginsJson:
             {"name": "genomic-qc", "description": "QC pipeline", "version": "2.0"},
         ]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -143,8 +144,8 @@ class TestPluginsJson:
 class TestDeprecationWarnings:
     def test_retrieve_deprecated(self, runner):
         """retrieve command should show deprecation warning."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -181,7 +182,7 @@ class TestDeprecationWarnings:
         (results_dir / "output.enc").write_bytes(b"encrypted")
         (results_dir / "output_key.bin").write_bytes(b"key")
 
-        with patch("byod_cli.cli.ConfigManager"):
+        with patch("byod_cli.config.ConfigManager"):
             result = runner.invoke(
                 cli, ["decrypt", str(results_dir), "-o", str(tmp_path / "out")],
             )
@@ -212,7 +213,7 @@ class TestWaitFlag:
 
 class TestProfileCommands:
     def test_profile_list_empty(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.list_profiles.return_value = []
 
@@ -221,7 +222,7 @@ class TestProfileCommands:
             assert "No profiles" in result.output
 
     def test_profile_list_with_profiles(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.list_profiles.return_value = ["t-001", "t-002"]
             config_instance.get_active_profile_name.return_value = "t-001"
@@ -236,7 +237,7 @@ class TestProfileCommands:
             assert "Lab B" in result.output
 
     def test_profile_switch_success(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
 
             result = runner.invoke(cli, ["profile", "switch", "t-001"], catch_exceptions=False)
@@ -244,7 +245,7 @@ class TestProfileCommands:
             config_instance.set_active_profile.assert_called_once_with("t-001")
 
     def test_profile_switch_not_found(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.set_active_profile.side_effect = ValueError("Profile 'nope' not found")
             config_instance.list_profiles.return_value = ["t-001"]
@@ -253,7 +254,7 @@ class TestProfileCommands:
             assert result.exit_code == EXIT_ERROR
 
     def test_profile_show_no_profile(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.get_active_profile_name.return_value = None
 
@@ -262,7 +263,7 @@ class TestProfileCommands:
             assert "No active profile" in result.output
 
     def test_profile_show_with_profile(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.get_active_profile_name.return_value = "t-001"
             config_instance.get_profile.return_value = {
@@ -311,8 +312,8 @@ class TestExitCodes:
     def test_auth_failure_exit_code(self, runner):
         from byod_cli.api_client import AuthenticationError
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockClient:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands.auth.APIClient") as MockClient:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = "sk_live_test"
             config_instance.get_api_url.return_value = "https://api.test"
@@ -331,7 +332,7 @@ class TestExitCodes:
 
 class TestErrorMessages:
     def test_unauthenticated_message(self, runner):
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config_instance = MockConfig.return_value
             config_instance.get_api_key.return_value = None
 

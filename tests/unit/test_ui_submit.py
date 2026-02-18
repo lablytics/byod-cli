@@ -6,6 +6,27 @@ from unittest.mock import MagicMock, patch
 
 from byod_cli.ui.routes.submit import _format_bytes
 
+MOCK_PLUGINS = [
+    {
+        "name": "demo-count",
+        "version": "1.0.0",
+        "description": "Demo plugin",
+        "tags": [],
+        "inputs": [
+            {"name": "input_file", "type": "file", "formats": ["txt", "csv", "tsv", "log"]},
+        ],
+    },
+    {
+        "name": "genomic-qc",
+        "version": "1.0.0",
+        "description": "Genomic QC",
+        "tags": [],
+        "inputs": [
+            {"name": "fastq_files", "type": "file", "pattern": "*.fastq*"},
+        ],
+    },
+]
+
 
 def _parse_sse(text: str) -> list:
     """Parse SSE text into a list of {event, data} dicts."""
@@ -80,6 +101,7 @@ class TestSubmitJob:
         presigned.fields = {"key": "upload-key"}
         presigned.s3_key = "tenant/input.enc"
         mock_client.get_upload_url.return_value = presigned
+        mock_client.list_plugins.return_value = MOCK_PLUGINS
 
         # Mock job submission response
         submission = MagicMock()
@@ -105,7 +127,7 @@ class TestSubmitJob:
         resp = ui_client_authed.post(
             "/api/submit",
             data={"plugin": "demo-count", "description": "test job"},
-            files=[("files", ("sample.fastq", b"@SEQ\nATCG\n+\nIIII\n", "application/octet-stream"))],
+            files=[("files", ("test.txt", b"line one\nline two\n", "text/plain"))],
         )
 
         assert resp.status_code == 200
@@ -130,6 +152,7 @@ class TestSubmitJob:
         presigned.fields = {}
         presigned.s3_key = "tenant/input.tar.gz.enc"
         mock_client.get_upload_url.return_value = presigned
+        mock_client.list_plugins.return_value = MOCK_PLUGINS
 
         submission = MagicMock()
         submission.job_id = "multi-job-456"
@@ -182,7 +205,8 @@ class TestSubmitJob:
 
         client = TestClient(_create_test_app(config))
 
-        with patch("byod_cli.api_client.APIClient"):
+        with patch("byod_cli.api_client.APIClient") as mock_cls:
+            mock_cls.return_value.list_plugins.return_value = MOCK_PLUGINS
             resp = client.post(
                 "/api/submit",
                 data={"plugin": "demo-count"},
@@ -206,6 +230,7 @@ class TestSubmitJob:
         presigned.fields = {}
         presigned.s3_key = "tenant/input.enc"
         mock_client.get_upload_url.return_value = presigned
+        mock_client.list_plugins.return_value = MOCK_PLUGINS
         mock_api_client_cls.return_value = mock_client
 
         dek = os.urandom(32)

@@ -8,7 +8,7 @@ import os
 import pytest
 from cryptography.exceptions import InvalidTag
 
-from byod_cli.cli import NONCE_SIZE, _decrypt_data, _encrypt_data
+from byod_cli.commands._helpers import NONCE_SIZE, _decrypt_data, _encrypt_data
 
 
 class TestEncryptDecryptData:

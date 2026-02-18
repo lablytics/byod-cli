@@ -48,6 +48,28 @@ def _make_presigned_upload(index=0):
     )
 
 
+MOCK_PLUGINS = [
+    {
+        "name": "demo-count",
+        "version": "1.0.0",
+        "description": "Demo plugin",
+        "tags": [],
+        "inputs": [
+            {"name": "input_file", "type": "file", "formats": ["txt", "csv", "tsv", "log"]},
+        ],
+    },
+    {
+        "name": "genomic-qc",
+        "version": "1.0.0",
+        "description": "Genomic QC",
+        "tags": [],
+        "inputs": [
+            {"name": "fastq_files", "type": "file", "pattern": "*.fastq*"},
+        ],
+    },
+]
+
+
 def _setup_submit_mocks(mock_config_cls, mock_api_cls, mock_tenant_config):
     """Common mock setup for submit tests. Returns (config, api) mock instances."""
     config = mock_config_cls.return_value
@@ -56,6 +78,7 @@ def _setup_submit_mocks(mock_config_cls, mock_api_cls, mock_tenant_config):
 
     api = mock_api_cls.return_value
     api.get_tenant_config.return_value = mock_tenant_config
+    api.list_plugins.return_value = MOCK_PLUGINS
     api.get_upload_url.side_effect = [
         _make_presigned_upload(1),
         _make_presigned_upload(2),
@@ -74,11 +97,11 @@ def _setup_submit_mocks(mock_config_cls, mock_api_cls, mock_tenant_config):
 class TestSubmitCommand:
     def test_submit_file_success(self, runner, tmp_path, mock_tenant_config):
         """Submit a single file - happy path."""
-        test_file = tmp_path / "sample.fastq"
-        test_file.write_bytes(b"@SEQ_001\nATCGATCG\n+\nIIIIIIII\n")
+        test_file = tmp_path / "sample.txt"
+        test_file.write_bytes(b"line one\nline two\nline three\n")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.post") as mock_post:
 
@@ -114,8 +137,8 @@ class TestSubmitCommand:
         (data_dir / "file1.fastq").write_bytes(b"@SEQ_001\nATCG\n")
         (data_dir / "file2.fastq").write_bytes(b"@SEQ_002\nGCTA\n")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.post") as mock_post:
 
@@ -145,8 +168,8 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.post") as mock_post:
 
@@ -180,7 +203,7 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config = MockConfig.return_value
             config.get_api_key.return_value = None
 
@@ -192,14 +215,15 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI:
 
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
             config.get_api_url.return_value = "https://api.test"
 
             api = MockAPI.return_value
+            api.list_plugins.return_value = MOCK_PLUGINS
             api.get_tenant_config.return_value = TenantConfig(
                 tenant_id="t-001",
                 organization_name="Test",
@@ -219,8 +243,8 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.post") as mock_post:
 
@@ -247,8 +271,8 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient"):
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient"):
 
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
@@ -265,8 +289,8 @@ class TestSubmitCommand:
         test_file = tmp_path / "data.txt"
         test_file.write_bytes(b"test data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.post") as mock_post:
 

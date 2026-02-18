@@ -18,7 +18,8 @@ from byod_cli.api_client import (
     PresignedDownload,
     TenantConfig,
 )
-from byod_cli.cli import _encrypt_data, cli
+from byod_cli.cli import cli
+from byod_cli.commands._helpers import _encrypt_data
 
 
 @pytest.fixture
@@ -76,8 +77,8 @@ class TestRetrieveCommand:
         """Retrieve downloads encrypted results and creates manifest."""
         output_dir = tmp_path / "results"
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("requests.get") as mock_get:
 
             config = MockConfig.return_value
@@ -125,7 +126,7 @@ class TestRetrieveCommand:
         output_dir.mkdir()
         (output_dir / "existing.txt").write_text("data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
             config.get_api_url.return_value = "https://api.test"
@@ -140,8 +141,8 @@ class TestRetrieveCommand:
         output_dir.mkdir()
         (output_dir / "existing.txt").write_text("data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("requests.get") as mock_get:
 
             config = MockConfig.return_value
@@ -175,8 +176,8 @@ class TestRetrieveCommand:
         """Retrieve fails when download returns error."""
         output_dir = tmp_path / "results"
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("requests.get") as mock_get:
 
             config = MockConfig.return_value
@@ -240,7 +241,7 @@ class TestDecryptCommand:
 
         self._create_encrypted_results(results_dir, plaintext, result_key)
 
-        with patch("byod_cli.cli.ConfigManager"), \
+        with patch("byod_cli.config.ConfigManager"), \
              patch("boto3.client") as mock_boto3:
 
             self._mock_kms(mock_boto3, result_key)
@@ -266,7 +267,7 @@ class TestDecryptCommand:
         })
         self._create_encrypted_results(results_dir, archive, result_key)
 
-        with patch("byod_cli.cli.ConfigManager"), \
+        with patch("byod_cli.config.ConfigManager"), \
              patch("boto3.client") as mock_boto3:
 
             self._mock_kms(mock_boto3, result_key)
@@ -288,7 +289,7 @@ class TestDecryptCommand:
         results_dir.mkdir()
         output_dir = tmp_path / "decrypted"
 
-        with patch("byod_cli.cli.ConfigManager"):
+        with patch("byod_cli.config.ConfigManager"):
             result = runner.invoke(cli, ["decrypt", str(results_dir), "-o", str(output_dir)])
             assert result.exit_code != 0
 
@@ -303,7 +304,7 @@ class TestDecryptCommand:
         })
         self._create_encrypted_results(results_dir, archive, result_key)
 
-        with patch("byod_cli.cli.ConfigManager"), \
+        with patch("byod_cli.config.ConfigManager"), \
              patch("boto3.client") as mock_boto3:
 
             self._mock_kms(mock_boto3, result_key)
@@ -364,8 +365,8 @@ class TestGetCommand:
         plaintext = b"Result data from enclave processing."
         encrypted = _encrypt_data(plaintext, result_key)
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.get") as mock_get:
 
@@ -394,8 +395,8 @@ class TestGetCommand:
         })
         encrypted = _encrypt_data(archive, result_key)
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.get") as mock_get:
 
@@ -418,8 +419,8 @@ class TestGetCommand:
         output_dir = tmp_path / "output"
         encrypted = _encrypt_data(b"data", result_key)
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.get") as mock_get:
 
@@ -442,8 +443,8 @@ class TestGetCommand:
         output_dir = tmp_path / "output"
         encrypted = _encrypt_data(b"data", result_key)
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("requests.get") as mock_get:
 
@@ -467,7 +468,7 @@ class TestGetCommand:
         output_dir.mkdir()
         (output_dir / "existing.txt").write_text("data")
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig:
+        with patch("byod_cli.config.ConfigManager") as MockConfig:
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
             config.get_api_url.return_value = "https://api.test"

@@ -9,12 +9,91 @@ import { SecurityBanner } from "../components/SecurityBanner";
 import { ProgressTracker } from "../components/ProgressTracker";
 import { SkeletonChecklist } from "../components/Skeleton";
 
+interface PluginInput {
+  name: string;
+  type: string;
+  formats?: string[];
+  pattern?: string;
+  required?: boolean;
+  multiple?: boolean;
+}
+
 interface Plugin {
   name: string;
   description: string;
   version?: string;
   input_type?: string;
   tags?: string[];
+  inputs?: PluginInput[];
+}
+
+/** Derive the `accept` attribute string and a human-readable hint from plugin inputs. */
+function getAcceptInfo(inputs?: PluginInput[]): { accept: string | undefined; hint: string | undefined } {
+  if (!inputs) return { accept: undefined, hint: undefined };
+
+  const extensions: string[] = [];
+  for (const inp of inputs) {
+    if (inp.type !== "file") continue;
+    if (inp.formats) {
+      for (const fmt of inp.formats) {
+        extensions.push(`.${fmt.toLowerCase()}`);
+      }
+    } else if (inp.pattern) {
+      // Map known patterns to extensions for the browser file picker
+      if (inp.pattern.toLowerCase().includes("fastq")) {
+        extensions.push(".fastq", ".fastq.gz", ".fq", ".fq.gz");
+      }
+    }
+  }
+
+  if (extensions.length === 0) return { accept: undefined, hint: undefined };
+  return {
+    accept: extensions.join(","),
+    hint: `Accepts: ${extensions.join(", ")}`,
+  };
+}
+
+/** Check if files match the plugin's accepted types. Returns list of rejected filenames. */
+function getFileValidationErrors(files: File[], inputs?: PluginInput[]): string[] {
+  if (!inputs) return [];
+
+  const fileInputs = inputs.filter((i) => i.type === "file");
+  if (fileInputs.length === 0) return [];
+
+  const rejected: string[] = [];
+  for (const file of files) {
+    const name = file.name.toLowerCase();
+    let matches = false;
+    for (const inp of fileInputs) {
+      if (inp.formats) {
+        const ext = name.split(".").pop() || "";
+        // Check single extension
+        if (inp.formats.some((f) => f.toLowerCase() === ext)) { matches = true; break; }
+        // Check double extension (e.g., fastq.gz)
+        const parts = name.split(".");
+        if (parts.length >= 3) {
+          const doubleExt = parts.slice(-2).join(".");
+          if (inp.formats.some((f) => f.toLowerCase() === doubleExt)) { matches = true; break; }
+        }
+      } else if (inp.pattern) {
+        if (matchGlob(name, inp.pattern.toLowerCase())) { matches = true; break; }
+      } else {
+        // No restriction on this input
+        matches = true;
+        break;
+      }
+    }
+    if (!matches) rejected.push(file.name);
+  }
+  return rejected;
+}
+
+/** Simple glob matcher supporting * and ? */
+function matchGlob(str: string, pattern: string): boolean {
+  const regex = new RegExp(
+    "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
+  );
+  return regex.test(str);
 }
 
 interface HealthStatus {
@@ -93,6 +172,11 @@ export function Submit() {
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
   const variants = direction > 0 ? slideInRight : slideInLeft;
+
+  // Derive accept string and format hint from selected plugin
+  const selectedPluginMeta = plugins.find((p) => p.name === selectedPlugin);
+  const { accept: acceptStr, hint: formatHint } = getAcceptInfo(selectedPluginMeta?.inputs);
+  const fileErrors = getFileValidationErrors(files, selectedPluginMeta?.inputs);
 
   // Success state
   if (sse.result) {
@@ -308,7 +392,19 @@ export function Submit() {
                 onFilesSelect={setFiles}
                 onClear={() => setFiles([])}
                 onRemove={handleRemoveFile}
+                accept={acceptStr}
               />
+              {formatHint && (
+                <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-dim)" }}>
+                  {formatHint}
+                </div>
+              )}
+              {fileErrors.length > 0 && (
+                <div style={{ marginTop: "8px", padding: "12px", background: "rgba(239, 68, 68, 0.1)", border: "1px solid var(--red)", borderRadius: "8px", fontSize: "13px", color: "var(--red)" }}>
+                  <strong>Invalid file types:</strong>{" "}
+                  {fileErrors.join(", ")}
+                </div>
+              )}
               <div className="input-group" style={{ marginTop: "20px" }}>
                 <label>Description (optional)</label>
                 <input
@@ -321,7 +417,7 @@ export function Submit() {
               </div>
               <div className="step-actions">
                 <button className="btn-secondary" onClick={goBack}>Back</button>
-                <button className="btn-primary" disabled={files.length === 0} onClick={goNext}>
+                <button className="btn-primary" disabled={files.length === 0 || fileErrors.length > 0} onClick={goNext}>
                   Continue
                 </button>
               </div>

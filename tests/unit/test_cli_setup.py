@@ -64,8 +64,8 @@ class TestSetupCommand:
 
     def test_setup_success(self, runner, enclave_info):
         """Setup creates IAM role, KMS key, and registers with Lablytics."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("time.sleep"):
 
@@ -91,8 +91,8 @@ class TestSetupCommand:
 
     def test_setup_kms_policy_has_attestation(self, runner, enclave_info):
         """Setup creates KMS key with PCR0 attestation condition."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("time.sleep"):
 
@@ -125,8 +125,8 @@ class TestSetupCommand:
 
     def test_setup_role_already_exists(self, runner, enclave_info):
         """Setup handles existing IAM role gracefully and continues."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("time.sleep"):
 
@@ -154,8 +154,8 @@ class TestSetupCommand:
 
     def test_setup_aws_credentials_error(self, runner, enclave_info):
         """Setup fails when AWS credentials are not configured."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3:
 
             config = MockConfig.return_value
@@ -177,8 +177,8 @@ class TestSetupCommand:
 
     def test_setup_registration_failure(self, runner, enclave_info):
         """Setup reports error when Lablytics registration fails."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3, \
              patch("time.sleep"):
 
@@ -200,8 +200,8 @@ class TestSetupCommand:
 
     def test_setup_enclave_info_error(self, runner):
         """Setup fails when enclave info API call fails."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI:
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI:
 
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
@@ -268,8 +268,8 @@ class TestUpdatePolicyCommand:
         old_pcr0 = ["old_pcr0_value" * 3]
         new_pcr0 = enclave_info["pcr0_values"]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3:
 
             self._setup_config_mocks(MockConfig, MockAPI, enclave_info)
@@ -299,8 +299,8 @@ class TestUpdatePolicyCommand:
         """Update-policy detects when policy is already up to date."""
         pcr0 = enclave_info["pcr0_values"]
 
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3:
 
             self._setup_config_mocks(MockConfig, MockAPI, enclave_info)
@@ -319,8 +319,8 @@ class TestUpdatePolicyCommand:
 
     def test_update_policy_no_active_profile(self, runner):
         """Update-policy fails when no active profile exists."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient"):
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient"):
 
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
@@ -332,8 +332,8 @@ class TestUpdatePolicyCommand:
 
     def test_update_policy_no_kms_key_in_config(self, runner):
         """Update-policy fails when no KMS key ARN in config."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient"):
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient"):
 
             config = MockConfig.return_value
             config.get_api_key.return_value = "sk_live_test"
@@ -346,8 +346,8 @@ class TestUpdatePolicyCommand:
 
     def test_update_policy_kms_read_error(self, runner, enclave_info):
         """Update-policy fails when KMS get_key_policy fails."""
-        with patch("byod_cli.cli.ConfigManager") as MockConfig, \
-             patch("byod_cli.cli.APIClient") as MockAPI, \
+        with patch("byod_cli.config.ConfigManager") as MockConfig, \
+             patch("byod_cli.commands._helpers.APIClient") as MockAPI, \
              patch("boto3.client") as mock_boto3:
 
             self._setup_config_mocks(MockConfig, MockAPI, enclave_info)
