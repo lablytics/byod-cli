@@ -425,7 +425,7 @@ def teardown(ctx: click.Context, region: str, keep_days: int) -> None:
         else:
             console.print(_helpers.format_error(f"  Failed to delete IAM role: {e}"))
 
-    console.print(f"\n[dim]Scheduling KMS key for deletion...[/dim]")
+    console.print("\n[dim]Scheduling KMS key for deletion...[/dim]")
     try:
         alias_response = kms.describe_key(KeyId=alias_name)
         key_id = alias_response["KeyMetadata"]["KeyId"]
@@ -463,9 +463,9 @@ def teardown(ctx: click.Context, region: str, keep_days: int) -> None:
     if deleted_role and deleted_key:
         console.print(_helpers.format_success("Teardown complete!"))
         console.print("=" * 60)
-        console.print(f"\n  IAM role: deleted")
+        console.print("\n  IAM role: deleted")
         console.print(f"  KMS key: pending deletion ({keep_days} day waiting period)")
-        console.print(f"\n  To re-setup later: [cyan]byod setup[/cyan]")
+        console.print("\n  To re-setup later: [cyan]byod setup[/cyan]")
     else:
         console.print(_helpers.format_warning("Teardown partially completed. Check errors above."))
         console.print("=" * 60)

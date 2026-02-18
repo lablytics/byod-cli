@@ -65,7 +65,6 @@ def submit(
         byod submit demo-count ./data.txt --wait
         byod submit genomic-qc ./samples/ --tags experiment=exp001
     """
-    import time
 
     import boto3
 

@@ -8,7 +8,6 @@ instance used across all command modules.
 from __future__ import annotations
 
 import os
-import sys
 
 import click
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -18,10 +17,10 @@ from rich.table import Table
 from byod_cli.api_client import APIClient
 from byod_cli.config import ConfigManager
 from byod_cli.utils import (
-    format_bytes,
-    format_error,
-    format_success,
-    format_warning,
+    format_bytes,  # noqa: F401 — re-exported, accessed via _helpers.format_bytes
+    format_error,  # noqa: F401 — re-exported, accessed via _helpers.format_error
+    format_success,  # noqa: F401 — re-exported, accessed via _helpers.format_success
+    format_warning,  # noqa: F401 — re-exported, accessed via _helpers.format_warning
     get_console,
 )
 
