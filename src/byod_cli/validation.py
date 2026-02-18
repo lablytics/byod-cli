@@ -4,6 +4,8 @@ Validates filenames against a plugin's declared input spec from plugin.yaml.
 Supports both extension-based (formats) and glob-based (pattern) validation.
 """
 
+from __future__ import annotations
+
 import fnmatch
 from pathlib import PurePosixPath
 
